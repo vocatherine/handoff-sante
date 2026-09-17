@@ -680,7 +680,7 @@
     // génération automatique de résumé pour l'instant.
     sample = null;
     if (db) {
-      unsubEtabs = db.collection("etablissements").limit(500).onSnapshot(snap => {
+      unsubEtabs = db.collection("etablissements").limit(30000).onSnapshot(snap => {
         etablissements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (route === "#/" || route.startsWith("#/service-nouveau") || route.startsWith("#/temoignage")) render();
       }, () => {});
