@@ -182,6 +182,10 @@
   .badge.muted{ background:var(--surface-2); color:var(--muted); }
   .empty{ text-align:center; padding:60px 20px; color:var(--muted); }
   .empty h3{ color:var(--ink-soft); margin-bottom:6px; }
+  .unref-section{ margin-top:22px; padding-top:18px; border-top:1px dashed var(--border); }
+  .unref-title{ font-size:13px; color:var(--muted); margin-bottom:12px; }
+  .unref-card{ border-style:dashed; }
+  .unref-cta{ font-size:12.5px; font-weight:600; color:var(--accent-strong); margin-top:auto; }
 
   /* ---------- Detail page ---------- */
   .back{ display:inline-flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:13px; cursor:pointer; margin-bottom:16px; border:none; background:none; padding:0; font-weight:500; }
@@ -726,7 +730,7 @@
 
     if (route.startsWith("#/service/")) { renderServiceDetail(app, route.slice(10).split("?")[0]); return; }
     if (route.startsWith("#/temoignage")) { renderWizard(app); return; }
-    if (route.startsWith("#/service-nouveau")) { renderNouveauService(app); return; }
+    if (route.startsWith("#/service-nouveau")) { renderNouveauService(app, route); return; }
     if (route.startsWith("#/faq")) { renderFaq(app); return; }
     if (route.startsWith("#/cgu")) { renderCgu(app); return; }
     if (route.startsWith("#/confidentialite")) { renderConfidentialite(app); return; }
@@ -764,6 +768,7 @@
     if (filterState.type) list = list.filter(s => s.typeService === filterState.type);
     if (filterState.onlyFlagged) list = list.filter(s => (s.flagMaltraitance||0)+(s.flagHarcelement||0)+(s.flagRacisme||0) > 0);
     list.sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
+    const unreferenced = unreferencedEtabsForQuery(filterState.q, filterState.region, filterState.type, filterState.onlyFlagged);
 
     app.innerHTML = `
       ${bannerHtml()}
@@ -815,7 +820,7 @@
     document.getElementById("f-type").onchange = (e) => { filterState.type = e.target.value; renderHomeList(); };
     document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; renderHomeList(); };
 
-    paintHomeList(list);
+    paintHomeList(list, unreferenced);
 
     function renderHomeList(){
       let l = services.slice();
@@ -825,19 +830,56 @@
       if (filterState.onlyFlagged) l = l.filter(s => (s.flagMaltraitance||0)+(s.flagHarcelement||0)+(s.flagRacisme||0) > 0);
       l.sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
       document.getElementById("f-flag").classList.toggle("on", filterState.onlyFlagged);
-      paintHomeList(l);
+      paintHomeList(l, unreferencedEtabsForQuery(filterState.q, filterState.region, filterState.type, filterState.onlyFlagged));
     }
   }
 
-  function paintHomeList(list){
+  // Établissements qui correspondent à la recherche/aux filtres mais n'ont encore AUCUN service
+  // référencé — sans ça, ils restent invisibles dans la recherche (qui ne porte que sur les
+  // services), alors même qu'ils existent bien dans l'annuaire (import FINESS notamment).
+  function unreferencedEtabsForQuery(q, region, type, onlyFlagged){
+    if (!q || type || onlyFlagged) return []; // le type de SERVICE et "signalements" ne s'appliquent pas à un établissement sans service
+    const query = q.toLowerCase();
+    const etabIdsWithService = new Set(services.map(sv => sv.etablissementId));
+    let matched = etablissements.filter(e => !etabIdsWithService.has(e.id) && (e.nom+" "+(e.ville||"")).toLowerCase().includes(query));
+    if (region) matched = matched.filter(e => e.region === region);
+    return matched.slice(0, 8);
+  }
+
+  function paintHomeList(list, unreferenced){
     const holder = document.getElementById("home-list");
     if (!holder) return;
-    if (!list.length) {
+    unreferenced = unreferenced || [];
+    if (!list.length && !unreferenced.length) {
       holder.innerHTML = `<div class="empty"><h3>Rien par ici pour l'instant</h3><p>Élargis les filtres, ou ajoute toi-même le service que tu cherches — 1 minute chrono.</p></div>`;
       return;
     }
-    holder.innerHTML = `<div class="grid">${list.map(cardHtml).join("")}</div>`;
-    holder.querySelectorAll(".card").forEach(c => c.onclick = () => nav("#/service/"+c.dataset.id));
+    const gridHtml = list.length ? `<div class="grid">${list.map(cardHtml).join("")}</div>` : "";
+    const unrefHtml = unreferenced.length ? `
+      <div class="unref-section">
+        <div class="unref-title">Ces établissements existent mais n'ont encore aucun service référencé — sois le·la premier·ère à en ajouter un :</div>
+        <div class="grid">${unreferenced.map(unrefEtabCardHtml).join("")}</div>
+      </div>` : "";
+    holder.innerHTML = gridHtml + unrefHtml;
+    holder.querySelectorAll(".card[data-id]").forEach(c => c.onclick = () => nav("#/service/"+c.dataset.id));
+    holder.querySelectorAll(".unref-card").forEach(c => c.onclick = () => nav("#/service-nouveau?etab="+encodeURIComponent(c.dataset.etabId)));
+  }
+
+  function unrefEtabCardHtml(e){
+    return `
+      <div class="card unref-card" data-etab-id="${esc(e.id)}">
+        <div class="card-top">
+          <div>
+            <h3>${esc(e.nom)}</h3>
+            <div class="etab">${esc(e.ville||"")}${e.region?` · ${esc(e.region)}`:""}</div>
+          </div>
+        </div>
+        <div class="card-badges">
+          <span class="badge muted">${esc(e.type||"")}</span>
+          <span class="badge muted">Aucun service référencé pour l'instant</span>
+        </div>
+        <div class="unref-cta">+ Ajouter le premier service ici</div>
+      </div>`;
   }
 
   function cardHtml(s){
@@ -1332,17 +1374,20 @@
   };
 
   // ---------------------------------------------------------------- NOUVEAU SERVICE (standalone)
-  function renderNouveauService(app){
+  function renderNouveauService(app, route){
+    const qs = new URLSearchParams((route||"").split("?")[1]||"");
+    const prefillId = qs.get("etab") || null;
+    const prefillEtab = prefillId ? etablissements.find(e=>e.id===prefillId) : null;
     app.innerHTML = `
       <button class="back" onclick="nav('#/')">← Retour</button>
       <div class="pagehead">
         <div class="eyebrow">Répertoire</div>
         <h1>Ajouter un établissement &amp; un service</h1>
-        <p class="lede">Renseigne les informations factuelles du service — elles seront visibles avant même le premier témoignage.</p>
+        <p class="lede">${prefillEtab ? `Ajoute le premier service pour <strong>${esc(prefillEtab.nom)}</strong> — précise bien lequel (réanimation, urgences, gériatrie…), pas juste le nom de l'établissement.` : "Renseigne les informations factuelles du service — elles seront visibles avant même le premier témoignage."}</p>
       </div>
       <div class="formcard" id="etab-service-form"></div>
     `;
-    paintEtabServiceForm(document.getElementById("etab-service-form"), null, (newService) => {
+    paintEtabServiceForm(document.getElementById("etab-service-form"), prefillEtab ? prefillEtab.id : null, (newService) => {
       flashMsg = { type:"good", text:"Service ajouté. Tu peux maintenant déposer un témoignage." };
       nav("#/service/"+newService.id);
     });
