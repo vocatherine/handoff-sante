@@ -2,9 +2,9 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Handoff Santé — avis entre soignants sur les services de soin, pour savoir où on met les pieds avant une mission.">
 <title>Handoff Santé</title>
-<meta name="description" content="Handoff Sante - avis entre soignants sur les services ou ils ont travaille.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root{
@@ -674,11 +674,24 @@
       db = createSupabaseDb(sb);
     } catch(e){ db = null; }
     // Le résumé IA (aiSummary) reposait sur window.claude.use("sample"), une capacité propre aux
-    // artefacts Claude, indisponible en hébergement indépendant. sample reste donc à null : tout le
-    // code qui l'utilise est déjà protégé par des `if (!sample) return` (dégradation déjà prévue pour
-    // les visiteurs non connectés côté Claude), donc l'appli fonctionne normalement, juste sans
-    // génération automatique de résumé pour l'instant.
-    sample = null;
+    // artefacts Claude, indisponible en hébergement indépendant. On la remplace par un appel à notre
+    // propre fonction serveur /api/claude (voir api/claude.js dans le dépôt), qui relaie le prompt à
+    // l'API Anthropic avec une clé gardée côté serveur — jamais exposée au navigateur.
+    sample = {
+      json: async (prompt) => {
+        const r = await fetch("/api/claude", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        if (!r.ok) {
+          let code = "empty_completion";
+          try { code = (await r.json()).code || code; } catch(e) {}
+          const err = new Error(code); err.code = code; throw err;
+        }
+        return r.json();
+      }
+    };
     if (db) {
       unsubEtabs = db.collection("etablissements").limit(30000).onSnapshot(snap => {
         etablissements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
