@@ -360,6 +360,8 @@
   footer.appfoot{ border-top:1px solid var(--border); margin-top:40px; padding-block:20px; }
   footer.appfoot .wrap{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; font-size:12px; color:var(--muted); }
   footer.appfoot a{ color:var(--accent-strong); font-weight:600; }
+  footer.appfoot a.social-link{ display:inline-flex; align-items:center; gap:5px; }
+  footer.appfoot a.social-link img{ display:block; border-radius:4px; }
 
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
 </style>
@@ -407,8 +409,8 @@
     <span><a href="#/mentions-legales">Mentions légales</a></span>
     <span><a href="#/gerer-temoignage">Modifier / supprimer mon témoignage</a></span>
     <span><a href="#/suggestion">💡 Suggérer une amélioration</a></span>
-    <span><a href="#" id="social-instagram" title="Compte en préparation">📷 Instagram</a></span>
-    <span><a href="#" id="social-tiktok" title="Compte en préparation">🎵 TikTok</a></span>
+    <span><a href="#" id="social-instagram" class="social-link" title="Compte en préparation"><img src="https://cdn.simpleicons.org/instagram/E4405F" alt="" width="16" height="16"> Instagram</a></span>
+    <span><a href="#" id="social-tiktok" class="social-link" title="Compte en préparation"><img src="https://cdn.simpleicons.org/tiktok/000000" alt="" width="16" height="16"> TikTok</a></span>
   </div>
 </footer>
 
