@@ -171,6 +171,10 @@
     cursor:pointer; font-weight:500;
   }
   .chip-toggle.on{ background:var(--critical-bg); border-color:transparent; color:var(--critical); }
+  .testi-filters{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:-6px 0 14px; }
+  .testi-filters .chip-toggle{ padding:6px 12px; font-size:12.5px; }
+  .testi-filters .chip-toggle.on{ background:var(--accent-soft); border-color:transparent; color:var(--accent); }
+  .testi-pluminus{ display:flex; flex-direction:column; gap:2px; }
 
   /* ---------- Service cards ---------- */
   .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; }
@@ -506,13 +510,24 @@
   const TYPES_SERVICE = ["Médecine","Chirurgie","Réanimation / USC","Urgences","Gériatrie / EHPAD","Psychiatrie","Pédiatrie / néonat",
     "Bloc opératoire","SSR / rééducation","Maternité","Domicile","Dialyse / oncologie","Autre"];
   const PROFESSIONS = ["Infirmier·ère (IDE)","Aide-soignant·e (AS)","ASH","Étudiant·e IFSI","Étudiant·e AS/AES",
-    "Étudiant·e en médecine (externe)","Étudiant·e en médecine (interne)",
+    "Étudiant·e en médecine (externe)","Interne (médecine)","CCA / Chef·fe de clinique",
     "Kinésithérapeute","Médecin","Cadre de santé","Autre soignant·e"];
+  // Regroupements larges pour le filtre "voir les avis de mon métier" côté fiche service — chaque
+  // profession précise ci-dessus tombe dans un seul de ces groupes.
+  const PROFESSION_GROUPES = [
+    { k:"as", label:"AS / ASH", match: p => /^(Aide-soignant|ASH)/.test(p||"") },
+    { k:"ide", label:"IDE", match: p => /^Infirmier/.test(p||"") },
+    { k:"etudiant", label:"Étudiant·es", match: p => /^Étudiant/.test(p||"") },
+    { k:"medecin", label:"Interne / CCA / Médecin", match: p => /^(Interne|CCA|Médecin)/.test(p||"") },
+    { k:"autre", label:"Autre", match: p => !/^(Aide-soignant|ASH|Infirmier|Étudiant|Interne|CCA|Médecin)/.test(p||"") }
+  ];
   const STATUTS = ["Vacataire / intérim","CDD","Titulaire / CDI","Stage / mise en situation","Autre"];
   const CRITERES = [
     {k:"noteCharge", label:"Répartition de la charge"},
     {k:"noteAmbiance", label:"Environnement de travail"},
     {k:"noteDirection", label:"Écoute de la direction"},
+    {k:"noteHoraires", label:"Respect des horaires"},
+    {k:"noteGlissement", label:"Pas de glissement de tâches"},
     {k:"noteRemuneration", label:"Rémunération"}
   ];
 
@@ -636,6 +651,12 @@
   let etablissements = []; // local cache
   let services = [];       // local cache
   let unsubServices = null, unsubEtabs = null, unsubTemoignages = null;
+  let testiFilterGroup = null; // filtre "voir les avis de mon métier" sur la fiche service (null = tous)
+  function filterByProfessionGroup(items){
+    if (!testiFilterGroup) return items;
+    const g = PROFESSION_GROUPES.find(g => g.k === testiFilterGroup);
+    return g ? items.filter(t => g.match(t.profession)) : items;
+  }
   let route = location.hash || "#/";
   let flashMsg = null;
 
@@ -645,10 +666,10 @@
     return {
       profession: null, statut: null, periode: "",
       nbPatients: "", nbAs: "",
-      ratings: { noteCharge:null, noteAmbiance:null, noteDirection:null, noteRemuneration:null },
+      ratings: { noteCharge:null, noteAmbiance:null, noteDirection:null, noteHoraires:null, noteGlissement:null, noteRemuneration:null },
       flags: { maltraitance:false, harcelement:false, racisme:false },
       details: { maltraitance:"", harcelement:"", racisme:"" },
-      commentaire: "", acceptCgu: false
+      commentaire: "", pointsPositifs: "", pointsAmeliorer: "", acceptCgu: false
     };
   }
   // Navigation libre entre les étapes déjà atteintes du formulaire de témoignage : les données
@@ -853,8 +874,7 @@
       <div class="pagehead">
         <div class="eyebrow">Répertoire des services de soin</div>
         <h1>Fini l'omerta. Ici, on se dit tout.</h1>
-        <p class="lede-questions">Tu viens de décrocher une mission ou un nouveau poste, et tu voudrais, pour une fois, savoir dans quoi tu mets les pieds avant de dire oui ? Tu es étudiant·e et l'idée du prochain stage te noue déjà le ventre ? On te comprend — c'est exactement pour ça qu'Handoff Santé existe.</p>
-        <p class="lede">Ici, ce sont des soignant·es et des étudiant·es qui ont vraiment travaillé dans ces services qui parlent : la charge de travail, l'ambiance, l'écoute de la direction, la rémunération — et les choses qui ne devraient jamais arriver, mais qui arrivent quand même. Un lieu de travail sain et bienveillant, ce n'est pas un luxe, c'est la moindre des choses. Et aucun établissement ne devrait pouvoir maltraiter ses soignants sans que ça se sache. Ouvert à toute la France, de la métropole aux Outre-mer.</p>
+        <p class="lede">Sais enfin dans quoi tu mets les pieds avant une mission ou un stage : charge de travail, ambiance, écoute de la direction, rémunération — dit par celles et ceux qui y sont vraiment passés. <a href="#/apropos">Pourquoi Handoff Santé ?</a></p>
       </div>
 
       <div class="hero-actions">
@@ -1087,6 +1107,7 @@
       <div id="ai-holder"></div>
 
       <div class="section-title">Témoignages <span id="testi-count" style="font-weight:400;color:var(--muted);font-size:12.5px"></span></div>
+      <div class="testi-filters" id="testi-filters"></div>
       <div id="testi-list"><div class="empty">Chargement…</div></div>
     `;
 
@@ -1095,12 +1116,38 @@
     paintAiCard(s);
     paintCompleteForm(s);
 
+    testiFilterGroup = null;
+    let lastTestiItems = [];
+
+    function paintTestiFilters(items){
+      const holder = document.getElementById("testi-filters");
+      if (!holder) return;
+      const counts = {};
+      PROFESSION_GROUPES.forEach(g => { counts[g.k] = items.filter(t => g.match(t.profession)).length; });
+      const usable = PROFESSION_GROUPES.filter(g => counts[g.k] > 0);
+      if (usable.length < 2) { holder.innerHTML = ""; return; }
+      holder.innerHTML = `
+        <span class="hint" style="margin-right:6px">Filtrer par métier :</span>
+        <button type="button" class="chip-toggle${!testiFilterGroup?" on":""}" data-g="">Tous (${items.length})</button>
+        ${usable.map(g => `<button type="button" class="chip-toggle${testiFilterGroup===g.k?" on":""}" data-g="${g.k}">${esc(g.label)} (${counts[g.k]})</button>`).join("")}
+      `;
+      holder.querySelectorAll("button[data-g]").forEach(btn => {
+        btn.onclick = () => {
+          testiFilterGroup = btn.dataset.g || null;
+          paintTestiFilters(lastTestiItems);
+          paintTestimonials(filterByProfessionGroup(lastTestiItems), s, reponsesPubliees);
+        };
+      });
+    }
+
     if (db) {
       unsubTemoignages = db.collection("temoignages").where("serviceId","==",id).orderBy("createdAt","desc").limit(200)
         .onSnapshot(snap => {
           const items = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(t => (t.signalements||0) < 3 && isPublished(t));
+          lastTestiItems = items;
           document.getElementById("testi-count").textContent = items.length ? `(${items.length})` : "";
-          paintTestimonials(items, s, reponsesPubliees);
+          paintTestiFilters(items);
+          paintTestimonials(filterByProfessionGroup(items), s, reponsesPubliees);
         }, () => {
           document.getElementById("testi-list").innerHTML = `<div class="empty">Impossible de charger les témoignages pour le moment.</div>`;
         });
@@ -1217,7 +1264,7 @@
   }
 
   function paintCriteria(s){
-    const map = { noteCharge:s.avgCharge, noteAmbiance:s.avgAmbiance, noteDirection:s.avgDirection, noteRemuneration:s.avgRemuneration };
+    const map = { noteCharge:s.avgCharge, noteAmbiance:s.avgAmbiance, noteDirection:s.avgDirection, noteHoraires:s.avgHoraires, noteGlissement:s.avgGlissement, noteRemuneration:s.avgRemuneration };
     document.getElementById("criteria-holder").innerHTML = CRITERES.map(c => {
       const v = map[c.k];
       return `<div class="criterion">
@@ -1405,7 +1452,7 @@
         const snap = await db.collection("temoignages").where("serviceId","==",s.id).orderBy("createdAt","desc").limit(30).get();
         items = snap.docs.map(d => d.data()).filter(t => (t.signalements||0) < 3);
       }
-      const lines = items.map((t,i) => `${i+1}. [${t.profession||"?"}, ${t.statut||"?"}] charge=${t.noteCharge}/5 ambiance=${t.noteAmbiance}/5 direction=${t.noteDirection}/5${t.noteRemuneration!=null?` remuneration=${t.noteRemuneration}/5`:""}${t.nbPatientsCharge!=null?` patients_a_charge=${t.nbPatientsCharge}`:""}${t.nbAsAvecToi!=null?` as_presents=${t.nbAsAvecToi}`:""}${t.maltraitance?" [maltraitance signalée]":""}${t.harcelement?" [harcèlement signalé]":""}${t.racisme?" [racisme signalé]":""} — "${(t.commentaire||"").slice(0,400)}"`).join("\n");
+      const lines = items.map((t,i) => `${i+1}. [${t.profession||"?"}, ${t.statut||"?"}] charge=${t.noteCharge}/5 ambiance=${t.noteAmbiance}/5 direction=${t.noteDirection}/5${t.noteHoraires!=null?` horaires=${t.noteHoraires}/5`:""}${t.noteGlissement!=null?` glissement_taches=${t.noteGlissement}/5`:""}${t.noteRemuneration!=null?` remuneration=${t.noteRemuneration}/5`:""}${t.nbPatientsCharge!=null?` patients_a_charge=${t.nbPatientsCharge}`:""}${t.nbAsAvecToi!=null?` as_presents=${t.nbAsAvecToi}`:""}${t.maltraitance?" [maltraitance signalée]":""}${t.harcelement?" [harcèlement signalé]":""}${t.racisme?" [racisme signalé]":""}${t.pointsPositifs?` — plus: "${t.pointsPositifs.slice(0,200)}"`:""}${t.pointsAmeliorer?` — moins: "${t.pointsAmeliorer.slice(0,200)}"`:""} — "${(t.commentaire||"").slice(0,400)}"`).join("\n");
       const prompt = `Tu résumes des témoignages anonymes de soignants et étudiants en santé ayant travaillé dans un service de soin, pour aider d'autres soignants à décider s'ils veulent y prendre une mission.\n\nService : ${s.nom} (${s.typeService||"type non précisé"}) — ${s.etablissementNom}, ${s.etablissementVille||""}.\n\nTémoignages (les plus récents) :\n${lines || "(aucun témoignage textuel)"}\n\nRéponds UNIQUEMENT avec un objet JSON de cette forme, en français, neutre et factuel, sans inventer de détails absents des témoignages :\n{"synthese": "2 à 3 phrases résumant l'expérience globale rapportée", "points_forts": ["jusqu'à 3 points positifs concrets"], "points_vigilance": ["jusqu'à 3 points d'attention ou signalements, formulés sobrement, sans accusation individuelle"]}`;
       const result = await sample.json(prompt, { modelTier:"default", cache:false });
       if (db) {
@@ -1472,12 +1519,15 @@
           <span>Charge <b>${t.noteCharge}/5</b></span>
           <span>Ambiance <b>${t.noteAmbiance}/5</b></span>
           <span>Direction <b>${t.noteDirection}/5</b></span>
+          ${t.noteHoraires!=null ? `<span>Horaires <b>${t.noteHoraires}/5</b></span>` : ""}
+          ${t.noteGlissement!=null ? `<span>Glissement de tâches <b>${t.noteGlissement}/5</b></span>` : ""}
           ${t.noteRemuneration!=null ? `<span>Rémunération <b>${t.noteRemuneration}/5</b></span>` : ""}
           ${t.nbPatientsCharge!=null ? `<span>Patients à charge <b>${t.nbPatientsCharge}</b></span>` : ""}
           ${t.nbAsAvecToi!=null ? `<span>AS avec elle/lui <b>${t.nbAsAvecToi}</b></span>` : ""}
         </div>
         ${flags.length ? `<div class="testi-flags">${flags.map(f=>`<span class="badge warn" title="${esc(f.d||"")}">⚠ ${esc(f.l)}</span>`).join("")}</div>` : ""}
         ${flags.some(f=>f.d) ? `<p class="comment" style="color:var(--critical);font-size:13px">${flags.filter(f=>f.d).map(f=>esc(f.l)+" : "+esc(f.d)).join(" · ")}</p>` : ""}
+        ${(t.pointsPositifs || t.pointsAmeliorer) ? `<div class="testi-pluminus">${t.pointsPositifs ? `<p class="comment">👍 ${esc(t.pointsPositifs)}</p>` : ""}${t.pointsAmeliorer ? `<p class="comment">👎 ${esc(t.pointsAmeliorer)}</p>` : ""}</div>` : ""}
         ${t.commentaire ? `<p class="comment">${esc(t.commentaire)}</p>` : ""}
         ${reponsesMap[t.id] ? `<div class="testi-reponse"><b>Réponse de la direction de ${esc(reponsesMap[t.id].etablissementNom || service.etablissementNom)}</b><p>${esc(reponsesMap[t.id].texteReponse)}</p></div>` : ""}
         <div class="testi-foot">
@@ -1636,7 +1686,7 @@
       f.innerHTML = `
         ${calloutHtml}
         ${existing.length ? `<button type="button" class="btn-text" id="back-to-picker" style="margin-bottom:12px">← Revoir la liste des services déjà répertoriés</button>` : ""}
-        <div class="field"><label>Nom du service *</label><input type="text" id="sv-nom" placeholder="Ex. Réanimation polyvalente, Unité Alzheimer…"></div>
+        <div class="field"><label>Nom du service *</label><input type="text" id="sv-nom" placeholder="Ex. Unité SOS AVC — Neurologie"><div class="hint">Sois le plus précis possible sur l'unité exacte (pas juste "Neurologie") — ça aide énormément le prochain qui cherche. L'établissement et la ville sont déjà notés séparément, pas besoin de les répéter ici.</div></div>
         <div class="field"><label>Type de service *</label><select id="sv-type">${TYPES_SERVICE.map(t=>`<option>${esc(t)}</option>`).join("")}</select></div>
         <div class="field"><label>Nombre de lits <span style="font-weight:400;color:var(--muted)">(uniquement dans ce service)</span></label><input type="number" min="0" id="sv-lits" placeholder="Ex. 24" style="max-width:200px"></div>
         <div class="field">
@@ -1817,6 +1867,8 @@
       <div class="hint" style="margin-top:-8px;margin-bottom:8px">Facultatif, mais très utile : c'est ce qui permet à un·e futur·e collègue de savoir concrètement à quoi s'attendre avant d'accepter une mission ici.</div>
       <div class="field"><label>Environnement de travail / ambiance *</label><div class="segmented" data-k="noteAmbiance">${[1,2,3,4,5].map(n=>`<button type="button" class="seg-btn${ratings.noteAmbiance===n?" sel":""}" data-v="${n}">${n}</button>`).join("")}</div><div class="hint">1 = très dégradé · 5 = excellent</div></div>
       <div class="field"><label>Écoute de la direction *</label><div class="segmented" data-k="noteDirection">${[1,2,3,4,5].map(n=>`<button type="button" class="seg-btn${ratings.noteDirection===n?" sel":""}" data-v="${n}">${n}</button>`).join("")}</div><div class="hint">1 = aucune écoute · 5 = très à l'écoute</div></div>
+      <div class="field"><label>Respect des horaires</label><div class="segmented" data-k="noteHoraires">${[1,2,3,4,5].map(n=>`<button type="button" class="seg-btn${ratings.noteHoraires===n?" sel":""}" data-v="${n}">${n}</button>`).join("")}</div><div class="hint">1 = jamais respectés (heures sup non prévues, débordements fréquents) · 5 = toujours respectés</div></div>
+      <div class="field"><label>Glissement de tâches</label><div class="segmented" data-k="noteGlissement">${[1,2,3,4,5].map(n=>`<button type="button" class="seg-btn${ratings.noteGlissement===n?" sel":""}" data-v="${n}">${n}</button>`).join("")}</div><div class="hint">1 = glissement fréquent (tâches hors de ton rôle) · 5 = jamais</div></div>
       <div class="field"><label>Rémunération</label><div class="segmented" data-k="noteRemuneration">${[1,2,3,4,5].map(n=>`<button type="button" class="seg-btn${ratings.noteRemuneration===n?" sel":""}" data-v="${n}">${n}</button>`).join("")}<button type="button" class="seg-btn na${ratings.noteRemuneration===null&&f._remunNa?" sel":""}" data-v="na">Non concerné / je ne sais pas</button></div></div>
 
       <div class="field">
@@ -1827,7 +1879,12 @@
         <div class="care-note" id="care-note" ${(flags.maltraitance||flags.harcelement||flags.racisme)?"":"hidden"}>💛 Ce que tu as vécu ou observé compte, et ça ne devrait pas t'arriver. Merci d'avoir le courage d'en parler ici — décris juste les faits, à ton rythme, ça suffit amplement.</div>
       </div>
 
-      <div class="field"><label>Commentaire libre</label><textarea id="tm-commentaire" placeholder="Ce que tu voudrais qu'un·e collègue sache avant d'y aller… (sans nommer personne)">${esc(f.commentaire)}</textarea></div>
+      <div class="row2">
+        <div class="field"><label>👍 Ce qui t'a plu</label><textarea id="tm-plus" placeholder="Ce qui vaut le coup dans ce service (facultatif, sans nommer personne)">${esc(f.pointsPositifs)}</textarea></div>
+        <div class="field"><label>👎 Ce qui pourrait être amélioré</label><textarea id="tm-moins" placeholder="Ce qui t'a manqué ou posé problème (facultatif, sans nommer personne)">${esc(f.pointsAmeliorer)}</textarea></div>
+      </div>
+      <div class="hint" style="margin-top:-8px;margin-bottom:8px">Chaque personne cherche des choses différentes (charge de travail, ambiance, horaires…) — ces deux champs aident le prochain à se faire son propre avis, pas juste une note.</div>
+      <div class="field"><label>Commentaire libre</label><textarea id="tm-commentaire" placeholder="Autre chose à ajouter ? (facultatif, sans nommer personne)">${esc(f.commentaire)}</textarea></div>
 
       <div class="field"><label class="chk"><input type="checkbox" id="tm-accept-cgu" ${f.acceptCgu?"checked":""}> J'ai lu et j'accepte les <a href="#/cgu">conditions d'utilisation et les règles de la communauté</a>, notamment l'engagement à ne nommer personne.</label></div>
 
@@ -1843,6 +1900,8 @@
     document.getElementById("tm-periode").oninput = (e) => { f.periode = e.target.value; };
     document.getElementById("tm-nb-patients").oninput = (e) => { f.nbPatients = e.target.value; };
     document.getElementById("tm-nb-as").oninput = (e) => { f.nbAs = e.target.value; };
+    document.getElementById("tm-plus").oninput = (e) => { f.pointsPositifs = e.target.value; };
+    document.getElementById("tm-moins").oninput = (e) => { f.pointsAmeliorer = e.target.value; };
     document.getElementById("tm-commentaire").oninput = (e) => { f.commentaire = e.target.value; };
     document.getElementById("tm-accept-cgu").onchange = (e) => { f.acceptCgu = e.target.checked; };
 
@@ -1918,6 +1977,8 @@
     errEl.textContent = "";
     const freeTexts = [
       document.getElementById("tm-commentaire").value.trim(),
+      document.getElementById("tm-plus").value.trim(),
+      document.getElementById("tm-moins").value.trim(),
       (document.getElementById("detail-maltraitance")||{}).value || "",
       (document.getElementById("detail-harcelement")||{}).value || "",
       (document.getElementById("detail-racisme")||{}).value || ""
@@ -1938,12 +1999,15 @@
         statut: document.getElementById("tm-statut").value,
         dateMission: document.getElementById("tm-periode").value || null,
         noteCharge: ratings.noteCharge, noteAmbiance: ratings.noteAmbiance,
-        noteDirection: ratings.noteDirection, noteRemuneration: ratings.noteRemuneration,
+        noteDirection: ratings.noteDirection, noteHoraires: ratings.noteHoraires, noteGlissement: ratings.noteGlissement,
+        noteRemuneration: ratings.noteRemuneration,
         nbPatientsCharge: document.getElementById("tm-nb-patients").value ? Number(document.getElementById("tm-nb-patients").value) : null,
         nbAsAvecToi: document.getElementById("tm-nb-as").value ? Number(document.getElementById("tm-nb-as").value) : null,
         maltraitance: flags.maltraitance, maltraitanceDetail: (document.getElementById("detail-maltraitance")||{}).value || "",
         harcelement: flags.harcelement, harcelementDetail: (document.getElementById("detail-harcelement")||{}).value || "",
         racisme: flags.racisme, racismeDetail: (document.getElementById("detail-racisme")||{}).value || "",
+        pointsPositifs: document.getElementById("tm-plus").value.trim(),
+        pointsAmeliorer: document.getElementById("tm-moins").value.trim(),
         commentaire: document.getElementById("tm-commentaire").value.trim(),
         createdAt: new Date().toISOString(), signalements: 0,
         manageToken: genManageToken()
@@ -1953,8 +2017,8 @@
       bumpContribCount();
       const already = getContribCount();
       flashMsg = { type:"good", text: already <= 1
-        ? "Merci mille fois 🙌 Ton témoignage est en ligne, 100% anonyme — et tu viens de débloquer tous les témoignages d'Handoff Santé."
-        : `Encore merci ! (${already} témoignages donnés) Ton avis est en ligne, anonymement.` };
+        ? "Merci mille fois 🙌 Ton témoignage est enregistré, 100% anonyme — et tu viens de débloquer tous les témoignages d'Handoff Santé."
+        : `Encore merci ! (${already} témoignages donnés) Ton avis est enregistré, anonymement.` };
       addMyTestimonial({ token: data.manageToken, serviceId: service.id, serviceNom: service.nom, etablissementNom: service.etablissementNom, ville: service.etablissementVille||"", createdAt: data.createdAt });
       wiz = { step:1, service:null, etabDraft:null, etabPrefillId:null, maxStep:1, form:null };
       const hadFlags = flags.maltraitance || flags.harcelement || flags.racisme;
@@ -1971,16 +2035,19 @@
     const charge = items.map(t=>t.noteCharge).filter(v=>v!=null);
     const ambiance = items.map(t=>t.noteAmbiance).filter(v=>v!=null);
     const direction = items.map(t=>t.noteDirection).filter(v=>v!=null);
+    const horaires = items.map(t=>t.noteHoraires).filter(v=>v!=null);
+    const glissement = items.map(t=>t.noteGlissement).filter(v=>v!=null);
     const remun = items.map(t=>t.noteRemuneration).filter(v=>v!=null);
     const nbPatients = items.map(t=>t.nbPatientsCharge).filter(v=>v!=null);
     const nbAs = items.map(t=>t.nbAsAvecToi).filter(v=>v!=null);
     const avgCharge = avgOf(charge), avgAmbiance = avgOf(ambiance), avgDirection = avgOf(direction), avgRemuneration = avgOf(remun);
+    const avgHoraires = avgOf(horaires), avgGlissement = avgOf(glissement);
     const avgNbPatients = nbPatients.length ? round1(nbPatients.reduce((a,b)=>a+b,0)/nbPatients.length) : null;
     const avgNbAs = nbAs.length ? round1(nbAs.reduce((a,b)=>a+b,0)/nbAs.length) : null;
     const globals = [avgCharge, avgAmbiance, avgDirection].filter(v=>v!=null);
     const avgGlobal = globals.length ? round1(globals.reduce((a,b)=>a+b,0)/globals.length) : null;
     await db.collection("services").doc(serviceId).update({
-      nbTemoignages: items.length, avgCharge, avgAmbiance, avgDirection, avgRemuneration, avgGlobal,
+      nbTemoignages: items.length, avgCharge, avgAmbiance, avgDirection, avgHoraires, avgGlissement, avgRemuneration, avgGlobal,
       avgNbPatients, avgNbAs,
       flagMaltraitance: items.filter(t=>t.maltraitance).length,
       flagHarcelement: items.filter(t=>t.harcelement).length,
@@ -2157,14 +2224,15 @@
         <p class="lede">Ton témoignage est enregistré, 100% anonyme. Pour ta protection, il ne sera visible publiquement que dans <b>${PUBLICATION_DELAI_H}h</b> — ce petit délai empêche qu'on puisse deviner qui l'a posté en recoupant "qui vient de finir un service" avec un avis qui apparaîtrait tout de suite. Comme on ne conserve ni nom ni email, ce code est le SEUL moyen de le retrouver plus tard pour le modifier ou le supprimer — on ne pourra pas te le redonner si tu le perds.</p>
         <div class="selected-pill" style="font-size:20px; font-family:'IBM Plex Mono',monospace; padding:14px 18px;">🔑 ${esc(token)} <button type="button" id="copy-token" title="Copier">⧉</button></div>
         <p class="hint" id="copy-feedback" style="margin-top:8px;"></p>
+        <div class="banner good" style="margin-top:4px; margin-bottom:4px;">👉 Tu ne le verras pas encore sur la fiche du service (c'est normal, ${PUBLICATION_DELAI_H}h à attendre) — mais tu peux déjà le retrouver, le modifier ou le suivre à tout moment dans <a href="#/mes-temoignages">Mes témoignages</a>.</div>
         <div class="formfoot" style="margin-top:22px;">
           <a href="#/gerer-temoignage" class="btn-text">Modifier / supprimer un témoignage avec ce code</a>
-          <button type="button" class="btn-primary" id="go-service">Voir le service</button>
+          <button type="button" class="btn-primary" id="go-mine">Voir dans Mes témoignages</button>
         </div>
         <div id="app-feedback-holder" style="margin-top:28px;"></div>
       </div>
     `;
-    document.getElementById("go-service").onclick = () => nav("#/service/"+serviceId);
+    document.getElementById("go-mine").onclick = () => nav("#/mes-temoignages");
     document.getElementById("copy-token").onclick = async () => {
       try { await navigator.clipboard.writeText(token); document.getElementById("copy-feedback").textContent = "Copié ✓"; }
       catch(e) { document.getElementById("copy-feedback").textContent = "Sélectionne et copie le code manuellement."; }
@@ -2286,6 +2354,8 @@
   function paintManageForm(holder, t){
     holder.innerHTML = `
       <div class="banner good" style="margin-top:18px;">Témoignage retrouvé — ${esc(t.serviceNom)}, ${esc(t.etablissementNom)}.</div>
+      <div class="field"><label>👍 Ce qui t'a plu</label><textarea id="gt-plus">${esc(t.pointsPositifs||"")}</textarea></div>
+      <div class="field"><label>👎 Ce qui pourrait être amélioré</label><textarea id="gt-moins">${esc(t.pointsAmeliorer||"")}</textarea></div>
       <div class="field"><label>Commentaire libre</label><textarea id="gt-commentaire">${esc(t.commentaire||"")}</textarea></div>
       <div class="formfoot">
         <span class="hint" id="gt-save-error" style="color:var(--critical)"></span>
@@ -2299,7 +2369,9 @@
       const errEl = document.getElementById("gt-save-error");
       try {
         const newComment = document.getElementById("gt-commentaire").value.trim();
-        await db.collection("temoignages").doc(t.id).update({ commentaire: newComment });
+        const newPlus = document.getElementById("gt-plus").value.trim();
+        const newMoins = document.getElementById("gt-moins").value.trim();
+        await db.collection("temoignages").doc(t.id).update({ commentaire: newComment, pointsPositifs: newPlus, pointsAmeliorer: newMoins });
         holder.innerHTML = `<div class="banner good" style="margin-top:18px;">Modifications enregistrées, merci.</div>`;
       } catch(e) { errEl.textContent = "L'enregistrement a échoué, réessaie."; }
     };
@@ -2629,8 +2701,14 @@
   function renderApropos(app){
     app.innerHTML = `
       <div class="pagehead about">
-        <div class="eyebrow">Comment ça marche</div>
-        <h1>Anonymat, vérification et modération</h1>
+        <div class="eyebrow">Le projet</div>
+        <h1>Pourquoi Handoff Santé ?</h1>
+        <p class="lede">Tu viens de décrocher une mission ou un nouveau poste, et tu voudrais, pour une fois, savoir dans quoi tu mets les pieds avant de dire oui ? Tu es étudiant·e et l'idée du prochain stage te noue déjà le ventre ? On te comprend — c'est exactement pour ça qu'Handoff Santé existe. Ici, ce sont des soignant·es et des étudiant·es qui ont vraiment travaillé dans ces services qui parlent : la charge de travail, l'ambiance, l'écoute de la direction, la rémunération — et les choses qui ne devraient jamais arriver, mais qui arrivent quand même. Un lieu de travail sain et bienveillant, ce n'est pas un luxe, c'est la moindre des choses. Et aucun établissement ne devrait pouvoir maltraiter ses soignants sans que ça se sache. Ouvert à toute la France, de la métropole aux Outre-mer.</p>
+
+        <h2>Pourquoi ce nom, "Handoff" ?</h2>
+        <p>Un "handoff", en jargon soignant, c'est la transmission entre deux équipes — ce moment où on se passe le relais et où on se dit vraiment ce qu'il faut savoir pour la suite. C'est exactement l'esprit du projet : les soignant·es qui sont passé·es par un service transmettent ce qu'ils y ont vécu à celles et ceux qui vont y arriver. Le logo reprend cette idée : un "H" en deux tons de vert, relié en son centre par un point orange — le relais, la transmission entre pairs.</p>
+
+        <h2>Comment ça marche</h2>
         <p class="lede">Handoff Santé est un prototype fonctionnel. Voici ce qui est déjà en place, et ce qui reste à construire avant une mise en ligne publique.</p>
 
         <h2>La fondatrice</h2>
