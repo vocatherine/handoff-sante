@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Handoff Santé — avis entre soignants sur les services de soin, pour savoir où on met les pieds avant une mission.">
 <title>Handoff Santé</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0E6B5C">
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root{
@@ -80,6 +84,10 @@
   .howit{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border);
     border-radius:12px; overflow:hidden; margin-bottom:24px; }
   @media (max-width:640px){ .howit{ grid-template-columns:1fr; } }
+  .unlock-note{
+    background:var(--accent-soft); color:var(--ink); border-radius:12px; padding:12px 16px;
+    font-size:13px; line-height:1.5; margin-bottom:24px;
+  }
   .howit .step{ background:var(--surface); padding:16px 18px; display:flex; gap:12px; align-items:flex-start; }
   .howit .step .num{ font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--accent-strong); font-size:13px; flex:none;
     width:24px; height:24px; border-radius:50%; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; }
@@ -300,6 +308,24 @@
   .anon-note{ display:flex; gap:10px; align-items:flex-start; background:var(--surface-2); border-radius:10px; padding:12px 14px; font-size:12.5px; color:var(--ink-soft); margin-bottom:18px; }
   .care-note{ background:var(--accent-soft); border-radius:10px; padding:12px 14px; font-size:13px; color:var(--ink-soft); margin-top:10px; line-height:1.5; }
 
+  /* ---------- Bandeau "installer sur l'écran d'accueil" ---------- */
+  .install-banner{
+    display:flex; align-items:center; gap:12px; background:var(--accent-soft); color:var(--ink);
+    padding:10px 16px; font-size:13px;
+  }
+  .install-icon{ font-size:20px; flex:none; }
+  .install-text{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+  .install-text b{ font-size:13.5px; }
+  .install-text span{ color:var(--ink-soft); font-size:12px; }
+  .install-go{ flex:none; padding:8px 14px; font-size:13px; border-radius:8px; }
+  .install-close{
+    flex:none; background:none; border:none; color:var(--ink-soft); font-size:15px; cursor:pointer;
+    padding:4px 6px; line-height:1;
+  }
+  @media (max-width:560px){
+    .install-text span{ display:none; }
+  }
+
   /* ---------- About ---------- */
   .about p{ font-size:14.5px; color:var(--ink-soft); max-width:64ch; margin:0 0 14px; }
   .about h2{ font-size:18px; margin:26px 0 10px; }
@@ -353,6 +379,16 @@
     <span class="contrib-pill" id="contrib-pill" hidden></span>
     <button class="btn-primary" onclick="nav('#/temoignage')">+ Donne ton avis</button>
   </div>
+</div>
+
+<div id="install-banner" class="install-banner" hidden>
+  <span class="install-icon">📲</span>
+  <div class="install-text">
+    <b id="install-title">Installe Handoff Santé sur ton téléphone</b>
+    <span id="install-sub">Un accès en un geste depuis ton écran d'accueil, comme une vraie appli.</span>
+  </div>
+  <button type="button" class="btn-primary install-go" id="install-go">Installer</button>
+  <button type="button" class="install-close" id="install-close" aria-label="Fermer">✕</button>
 </div>
 
 <main class="wrap" id="app"></main>
@@ -604,7 +640,7 @@
   let flashMsg = null;
 
   // in-progress "déposer un témoignage" wizard state
-  let wiz = { step: 1, service: null, etabDraft:null, maxStep: 1, form: null };
+  let wiz = { step: 1, service: null, etabDraft:null, etabPrefillId:null, maxStep: 1, form: null };
   function freshWizForm(){
     return {
       profession: null, statut: null, periode: "",
@@ -625,50 +661,81 @@
   };
 
   // ---------------------------------------------------------------- boot
-  // Portail de confidentialité affiché aux testeurs avant tout accès au contenu (17/09/2026, à la
-  // demande explicite de Catherine, en attendant un vrai avis juridique). Ce n'est pas un NDA signé,
-  // mais un accord de confidentialité simplifié type "clickwrap" : il ne remplace pas un document signé,
-  // mais donne une trace horodatée du consentement et un fondement contractuel minimal en cas de manquement.
-  function hasSeenConfidentialite(){
-    try{ return localStorage.getItem("hs_nda_accepted_v1") === "1"; }catch(e){ return false; }
+  // L'appli est maintenant publique (handoffsante.fr) : on ne bloque plus l'entrée avec un mur de
+  // confidentialité "version de test privée" (utile tant que seuls des testeurs triés avaient le lien,
+  // contre-productif maintenant qu'on veut que de vrais soignants viennent ET fassent circuler le lien).
+  // À la place, un simple message de bienvenue non bloquant, affiché une seule fois par navigateur.
+  function maybeShowWelcome(){
+    try {
+      if (localStorage.getItem("hs_welcomed_v1") === "1") return;
+      localStorage.setItem("hs_welcomed_v1", "1");
+    } catch(e){}
+    flashMsg = { type:"good", text:"Bienvenue sur Handoff Santé 👋 Cherche ton service, lis les témoignages, et dépose le tien en toute confidentialité — sans jamais donner ton nom." };
   }
-  function markConfidentialiteAccepted(){
-    try{ localStorage.setItem("hs_nda_accepted_v1", "1"); }catch(e){}
+
+  // ---------------------------------------------------------------- installation (PWA)
+  // "beforeinstallprompt" peut se déclencher tôt : on l'écoute dès le chargement du script, pas
+  // seulement dans boot(), pour ne jamais le rater.
+  let deferredInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstallBanner("android");
+  });
+  function isStandaloneDisplay(){
+    try {
+      return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+    } catch(e){ return false; }
   }
-  function showConfidentialiteGate(){
-    return new Promise(resolve => {
-      if (hasSeenConfidentialite()){ resolve(); return; }
-      const overlay = document.createElement("div");
-      overlay.id = "nda-gate";
-      overlay.style.cssText = "position:fixed;inset:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;";
-      overlay.innerHTML = `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:480px;width:100%;box-shadow:var(--shadow);">
-          <div style="font-family:'Newsreader',serif;font-weight:600;font-size:22px;color:var(--ink);margin-bottom:6px;">Avant d'entrer : version confidentielle</div>
-          <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.55;margin:14px 0;">Tu accèdes à une version de test privée de <b>Handoff Santé</b>, pas encore ouverte au public.</p>
-          <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.55;margin:14px 0;">Le concept, les fonctionnalités, les textes, le design, le code et la base de données que tu vas découvrir sont un travail original, non publié, et confidentiel.</p>
-          <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.55;margin:14px 0 6px;">En continuant, tu t'engages à :</p>
-          <ul style="font-size:14.5px;color:var(--ink-soft);line-height:1.6;margin:0 0 14px 20px;padding:0;">
-            <li>ne pas divulguer, copier ni reproduire ce que tu vois ici ;</li>
-            <li>ne pas partager ce lien ou tes accès avec des personnes non explicitement invitées par la fondatrice ;</li>
-            <li>ne pas t'en inspirer pour créer un projet similaire, sans son accord écrit.</li>
-          </ul>
-          <p style="font-size:14.5px;color:var(--ink-soft);line-height:1.55;margin:14px 0;">Cette page vaut accord de confidentialité simplifié entre toi et la fondatrice. En cas de manquement, elle se réserve tous les recours prévus par la loi (droit d'auteur, droit des marques, concurrence déloyale et parasitisme).</p>
-          <p style="font-size:13px;color:var(--muted);line-height:1.5;margin:14px 0;">Une question sur ce point ? <a href="mailto:contact@handoffsante.fr" style="color:var(--accent);">contact@handoffsante.fr</a></p>
-          <div style="display:flex;flex-direction:column;gap:10px;">
-            <button type="button" id="nda-accept" style="padding:12px 18px;border-radius:10px;border:none;background:var(--accent);color:var(--on-accent);font-weight:600;cursor:pointer;font-size:14.5px;">J'ai lu et j'accepte, je continue</button>
-            <button type="button" id="nda-decline" style="padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--ink-soft);cursor:pointer;font-size:14px;">Je ne souhaite pas continuer</button>
-          </div>
-        </div>`;
-      document.body.appendChild(overlay);
-      overlay.querySelector("#nda-accept").onclick = () => { markConfidentialiteAccepted(); overlay.remove(); resolve(); };
-      overlay.querySelector("#nda-decline").onclick = () => {
-        overlay.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:420px;width:100%;text-align:center;font-size:14.5px;color:var(--ink-soft);line-height:1.55;">Pas de souci — tu peux fermer cette page à tout moment. Merci de ton intérêt pour Handoff Santé.</div>`;
-      };
-    });
+  function installDismissed(){ try{ return localStorage.getItem("hs_install_dismissed") === "1"; }catch(e){ return false; } }
+  function dismissInstallBanner(){
+    try{ localStorage.setItem("hs_install_dismissed", "1"); }catch(e){}
+    const b = document.getElementById("install-banner");
+    if (b) b.hidden = true;
+  }
+  function showInstallBanner(kind){
+    if (isStandaloneDisplay() || installDismissed()) return;
+    const banner = document.getElementById("install-banner");
+    if (!banner) return;
+    const titleEl = document.getElementById("install-title");
+    const subEl = document.getElementById("install-sub");
+    const goBtn = document.getElementById("install-go");
+    if (kind === "ios") {
+      titleEl.textContent = "Installe Handoff Santé sur ton iPhone";
+      subEl.textContent = "Appuie sur le bouton Partager puis \"Sur l'écran d'accueil\".";
+      goBtn.hidden = true;
+    } else {
+      titleEl.textContent = "Installe Handoff Santé sur ton téléphone";
+      subEl.textContent = "Un accès en un geste depuis ton écran d'accueil, comme une vraie appli.";
+      goBtn.hidden = false;
+    }
+    banner.hidden = false;
+  }
+  function initInstallBanner(){
+    const closeBtn = document.getElementById("install-close");
+    const goBtn = document.getElementById("install-go");
+    if (closeBtn) closeBtn.onclick = dismissInstallBanner;
+    if (goBtn) goBtn.onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      try { await deferredInstallPrompt.userChoice; } catch(e){}
+      deferredInstallPrompt = null;
+      dismissInstallBanner();
+    };
+    // iOS Safari ne déclenche jamais "beforeinstallprompt" : seule solution, détecter la plateforme
+    // nous-mêmes et afficher l'instruction manuelle (Partager → Sur l'écran d'accueil).
+    const ua = navigator.userAgent || "";
+    const isIos = /iphone|ipad|ipod/i.test(ua) && !window.MSStream;
+    const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+    if (isIos && isSafari) showInstallBanner("ios");
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(()=>{}); });
+    }
   }
 
   async function boot(){
-    await showConfidentialiteGate();
+    maybeShowWelcome();
+    initInstallBanner();
     window.addEventListener("hashchange", () => { route = location.hash || "#/"; render(); });
     render(); // render immediately with whatever we have (empty state), then light up
 
@@ -808,8 +875,10 @@
       <div class="howit">
         <div class="step"><span class="num">1</span><div><b>Tu explores</b><span>Cherche le service où tu pars en mission, avant de dire oui.</span></div></div>
         <div class="step"><span class="num">2</span><div><b>Tu donnes ton avis</b><span>2 minutes, sans ton nom, juste ton expérience — même en 3 phrases.</span></div></div>
-        <div class="step"><span class="num">3</span><div><b>Ça aide la suite</b><span>Ton témoignage reste anonyme et aide le prochain à faire le bon choix.</span></div></div>
+        <div class="step"><span class="num">3</span><div><b>Tout se débloque</b><span>Ton témoignage reste anonyme, aide le prochain, et te donne accès à tous les témoignages d'Handoff Santé.</span></div></div>
       </div>
+
+      <div class="unlock-note">🔓 <b>1 avis donné = accès à tous les témoignages</b> de la plateforme, sur cet appareil. Les signalements graves (maltraitance, harcèlement, racisme) restent, eux, toujours visibles — contribution ou non.</div>
 
       <div class="stats">
         <div class="stat"><div class="n mono">${etablissements.length}</div><div class="l">établissements</div></div>
@@ -887,7 +956,7 @@
       ...svMatches.map(s => `
         <div class="pick-row" data-kind="service" data-id="${esc(s.id)}">
           <span class="pi">🩺</span>
-          <div class="pt"><div>${esc(s.nom)}</div><div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")}</div></div>
+          <div class="pt"><div>${esc(s.nom)}</div><div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")} · ${s.nbTemoignages||0} témoignage${(s.nbTemoignages||0)>1?"s":""}</div></div>
         </div>`),
       ...etabMatches.map(e => `
         <div class="pick-row" data-kind="etab" data-id="${esc(e.id)}">
@@ -1683,20 +1752,33 @@
       `;
       // Only the results list is redrawn on each keystroke — never the input itself — so
       // typing doesn't lose focus/cursor (that was the bug: recreating <input> every keystroke).
+      // On cherche aussi parmi les établissements SANS service référencé (pas seulement les services
+      // déjà là) — sinon un établissement des 27965 sans service tombe sur "aucun résultat" sans piste,
+      // alors qu'il existe bien et qu'on peut y ajouter un service en un clic.
       const updateResults = () => {
-        const results = q.length ? services.filter(s => (s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).toLowerCase().includes(q.toLowerCase())).slice(0,8) : [];
         const resultsEl = document.getElementById("svc-results");
-        resultsEl.innerHTML = results.map(s=>`<div class="pick-row" data-id="${esc(s.id)}">${esc(s.nom)}<div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")}</div></div>`).join("");
-        resultsEl.querySelectorAll(".pick-row").forEach(r => r.onclick = () => { wiz.service = services.find(s=>s.id===r.dataset.id); wiz.step = 3; renderWizard(app); });
+        if (!q.length) { resultsEl.innerHTML = ""; return; }
+        const svcResults = services.filter(s => (s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).toLowerCase().includes(q.toLowerCase())).slice(0,8);
+        const etabIdsWithService = new Set(services.map(sv => sv.etablissementId));
+        const etabResults = etablissements.filter(e => !etabIdsWithService.has(e.id) && (e.nom+" "+(e.ville||"")).toLowerCase().includes(q.toLowerCase())).slice(0,6);
+        resultsEl.innerHTML = [
+          ...svcResults.map(s=>`<div class="pick-row" data-kind="svc" data-id="${esc(s.id)}">🩺 ${esc(s.nom)}<div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")} · ${s.nbTemoignages||0} témoignage${(s.nbTemoignages||0)>1?"s":""}</div></div>`),
+          ...etabResults.map(e=>`<div class="pick-row" data-kind="etab" data-id="${esc(e.id)}">🏥 ${esc(e.nom)}<div class="sub">${esc(e.ville||"")} · pas encore de service référencé — clique pour l'ajouter</div></div>`)
+        ].join("") || `<div class="pick-row" style="cursor:default;color:var(--muted)">Aucun résultat pour "${esc(q)}"</div>`;
+        resultsEl.querySelectorAll(".pick-row[data-kind]").forEach(r => r.onclick = () => {
+          if (r.dataset.kind === "svc") { wiz.service = services.find(s=>s.id===r.dataset.id); wiz.step = 3; }
+          else { wiz.etabPrefillId = r.dataset.id; wiz.step = 2; }
+          renderWizard(app);
+        });
       };
       document.getElementById("svc-q").oninput = (e) => { q = e.target.value; updateResults(); };
-      document.getElementById("none-found").onclick = () => { wiz.step = 2; renderWizard(app); };
+      document.getElementById("none-found").onclick = () => { wiz.etabPrefillId = null; wiz.step = 2; renderWizard(app); };
       updateResults();
       return;
     }
 
     if (wiz.step === 2) {
-      paintEtabServiceForm(body, null, (newService) => { wiz.service = newService; wiz.step = 3; renderWizard(app); });
+      paintEtabServiceForm(body, wiz.etabPrefillId || null, (newService) => { wiz.service = newService; wiz.etabPrefillId = null; wiz.step = 3; renderWizard(app); });
       return;
     }
 
@@ -1704,7 +1786,7 @@
     drawRatingForm(body, wiz.service);
   }
 
-  function resetWizardAndGo(){ wiz = { step:1, service:null, etabDraft:null, maxStep:1, form:null }; nav("#/"); }
+  function resetWizardAndGo(){ wiz = { step:1, service:null, etabDraft:null, etabPrefillId:null, maxStep:1, form:null }; nav("#/"); }
   window.resetWizardAndGo = resetWizardAndGo;
 
   function drawRatingForm(body, service){
@@ -1874,7 +1956,7 @@
         ? "Merci mille fois 🙌 Ton témoignage est en ligne, 100% anonyme — et tu viens de débloquer tous les témoignages d'Handoff Santé."
         : `Encore merci ! (${already} témoignages donnés) Ton avis est en ligne, anonymement.` };
       addMyTestimonial({ token: data.manageToken, serviceId: service.id, serviceNom: service.nom, etablissementNom: service.etablissementNom, ville: service.etablissementVille||"", createdAt: data.createdAt });
-      wiz = { step:1, service:null, etabDraft:null, maxStep:1, form:null };
+      wiz = { step:1, service:null, etabDraft:null, etabPrefillId:null, maxStep:1, form:null };
       const hadFlags = flags.maltraitance || flags.harcelement || flags.racisme;
       nav("#/temoignage-confirme/"+service.id+"/"+encodeURIComponent(data.manageToken)+"/"+(ref.id||"")+"?care="+(hadFlags?"1":"0"));
     } catch(e) {
