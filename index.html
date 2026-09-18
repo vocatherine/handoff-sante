@@ -409,7 +409,7 @@
     <span><a href="#/mentions-legales">Mentions légales</a></span>
     <span><a href="#/gerer-temoignage">Modifier / supprimer mon témoignage</a></span>
     <span><a href="#/suggestion">💡 Suggérer une amélioration</a></span>
-    <span><a href="#" id="social-instagram" class="social-link" title="Compte en préparation"><img src="https://cdn.simpleicons.org/instagram/E4405F" alt="" width="16" height="16"> Instagram</a></span>
+    <span><a href="https://www.instagram.com/handoffsante/" id="social-instagram" class="social-link" target="_blank" rel="noopener noreferrer" title="Handoff Santé sur Instagram"><img src="https://cdn.simpleicons.org/instagram/E4405F" alt="" width="16" height="16"> Instagram</a></span>
     <span><a href="#" id="social-tiktok" class="social-link" title="Compte en préparation"><img src="https://cdn.simpleicons.org/tiktok/000000" alt="" width="16" height="16"> TikTok</a></span>
   </div>
 </footer>
@@ -762,15 +762,13 @@
     window.addEventListener("hashchange", () => { route = location.hash || "#/"; render(); });
     render(); // render immediately with whatever we have (empty state), then light up
 
-    // Réseaux sociaux (pied de page, HTML statique) : comptes pas encore créés (16/09/2026) — les icônes
-    // restent visibles pour préparer le terrain, mais préviennent au clic plutôt que de pointer nulle part.
-    // Dès que Catherine crée les comptes, remplacer ces deux handlers par de vrais <a href="https://...">.
+    // Réseaux sociaux (pied de page, HTML statique) : le compte Instagram est actif (18/09/2026, lien réel
+    // dans le HTML ci-dessus). Le compte TikTok existe mais n'est pas encore configuré/actif : on garde
+    // l'icône visible pour préparer le terrain, avec un message au clic plutôt qu'un lien mort.
     const socialComingSoon = (network) => (e) => {
       e.preventDefault();
       showAlert(`Le compte ${network} de Handoff Santé arrive bientôt — reviens voir par ici, ou écris-nous à contact@handoffsante.fr en attendant.`);
     };
-    const igLink = document.getElementById("social-instagram");
-    if (igLink) igLink.onclick = socialComingSoon("Instagram");
     const ttLink = document.getElementById("social-tiktok");
     if (ttLink) ttLink.onclick = socialComingSoon("TikTok");
 
