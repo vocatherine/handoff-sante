@@ -1018,7 +1018,7 @@
     if (suggestEtabId) { renderEtabServicesSuggest(); return; }
 
     const etabMatches = etablissements.filter(e => normSearch(e.nom+" "+(e.ville||"")).includes(q)).slice(0, 8);
-    const svMatches = services.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(q)).slice(0, 6);
+    const svMatches = services.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(q));
 
     if (!etabMatches.length && !svMatches.length) {
       box.innerHTML = `<div class="pick-row" style="cursor:default;color:var(--muted)">Aucun résultat pour "${esc(filterState.q)}"</div>`;
@@ -1055,7 +1055,7 @@
     if (!box) return;
     const etab = etablissements.find(e => e.id === suggestEtabId);
     if (!etab) { suggestEtabId = null; updateHeroSuggest(); return; }
-    const svcs = services.filter(s => s.etablissementId === etab.id).sort((a,b)=>a.nom.localeCompare(b.nom));
+    const svcs = services.filter(s => s.etablissementId === etab.id).sort((a,b)=>(a.nom||"").localeCompare(b.nom||""));
 
     box.innerHTML = `
       <div class="pick-row back-row" data-back="1"><span class="pi">←</span><div class="pt">Autres établissements</div></div>
