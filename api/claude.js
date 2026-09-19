@@ -14,7 +14,9 @@
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 12;
 const MAX_PROMPT_CHARS = 8000;
-const MODEL = "claude-3-5-haiku-20241022";
+// claude-3-5-haiku-20241022 a été retiré par Anthropic le 19/02/2026 (chaque appel échouait
+// donc avec une erreur 502) — remplacé le 20/09/2026 par le modèle Haiku actif.
+const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 700;
 
 // Remis à zéro à chaque redémarrage de la fonction : suffisant pour freiner un abus
