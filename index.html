@@ -897,7 +897,7 @@
           <label class="hero-search" for="f-q"><span>🔍</span><input type="search" id="f-q" autocomplete="off" placeholder="Rechercher un service, un établissement, une ville…" value="${esc(filterState.q)}"></label>
           <div class="hero-suggest searchpick" id="hero-suggest" style="display:none"></div>
         </div>
-        <button class="hero-cta" onclick="nav('#/temoignage')">+ Donne ton avis</button>
+        <button class="hero-cta" id="f-search-btn" type="button">🔍 Rechercher</button>
       </div>
 
       <div class="filters">
@@ -939,9 +939,16 @@
     const qInput = document.getElementById("f-q");
     qInput.oninput = (e) => { filterState.q = e.target.value; renderHomeList(); updateHeroSuggest(); };
     qInput.onfocus = () => updateHeroSuggest();
+    qInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } };
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".hero-search-wrap")) hideHeroSuggest();
     });
+    document.getElementById("f-search-btn").onclick = () => runSearch();
+    function runSearch(){
+      hideHeroSuggest();
+      renderHomeList();
+      document.getElementById("home-list").scrollIntoView({ behavior:"smooth", block:"start" });
+    }
     document.getElementById("f-region").onchange = (e) => { filterState.region = e.target.value; renderHomeList(); };
     document.getElementById("f-type").onchange = (e) => { filterState.type = e.target.value; renderHomeList(); };
     document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; renderHomeList(); };
