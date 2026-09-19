@@ -892,6 +892,11 @@
         <button class="btn-ghost" onclick="nav('#/service-nouveau')">+ Il manque un service ?</button>
       </div>
 
+      <!-- La liste de résultats vit juste sous la recherche/les filtres : elle doit apparaître au fur
+           et à mesure qu'on tape, sans avoir à scroller pour la découvrir (le reste — "comment ça
+           marche", stats, soutien — vient après, une fois qu'on a déjà vu ce qu'on cherchait). -->
+      <div id="home-list"></div>
+
       <div class="howit">
         <div class="step"><span class="num">1</span><div><b>Tu explores</b><span>Cherche le service où tu pars en mission, avant de dire oui.</span></div></div>
         <div class="step"><span class="num">2</span><div><b>Tu donnes ton avis</b><span>2 minutes, sans ton nom, juste ton expérience — même en 3 phrases.</span></div></div>
@@ -914,8 +919,6 @@
           <p>Déposer un témoignage et consulter l'annuaire ne coûtera jamais rien à celles et ceux qui le font vivre. Pour continuer à le faire grandir (hébergement, futures vérifications RPPS, développement), on compte sur la générosité de la communauté — une cagnotte en ligne arrive bientôt. En attendant, une question ou une envie de soutenir le projet ? <a href="mailto:contact@handoffsante.fr">contact@handoffsante.fr</a>.</p>
         </div>
       </div>
-
-      <div id="home-list"></div>
     `;
 
     const qInput = document.getElementById("f-q");
