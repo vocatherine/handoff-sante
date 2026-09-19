@@ -1031,8 +1031,8 @@
       <div class="card unref-card" data-etab-id="${esc(e.id)}">
         <div class="card-top">
           <div>
-            <h3>${esc(e.nom)}</h3>
-            <div class="etab">${esc(e.ville||"")}${e.region?` · ${esc(e.region)}`:""}</div>
+            <h3 title="${esc(e.nom)}">${esc(e.nom)}</h3>
+            <div class="etab" title="${esc(e.ville||"")}${e.region?` · ${esc(e.region)}`:""}">${esc(e.ville||"")}${e.region?` · ${esc(e.region)}`:""}</div>
           </div>
         </div>
         <div class="card-badges">
@@ -1053,8 +1053,8 @@
       <div class="card" data-id="${esc(s.id)}">
         <div class="card-top">
           <div>
-            <h3>${esc(s.nom)}</h3>
-            <div class="etab">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")}</div>
+            <h3 title="${esc(s.nom)}">${esc(s.nom)}</h3>
+            <div class="etab" title="${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")}">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")}</div>
           </div>
           <div class="score ${hasScore?"":"none"}">
             <div class="v">${hasScore ? s.avgGlobal.toFixed(1) : "—"}</div>
