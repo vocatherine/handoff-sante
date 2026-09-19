@@ -114,7 +114,10 @@
 
   /* ---------- Hero actions (accueil) ---------- */
   .hero-actions{
-    display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin:20px 0 24px;
+    display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin:20px 0 8px;
+  }
+  .hero-hint{
+    font-size:13px; color:var(--ink-soft); margin:0 0 20px 2px;
   }
   .hero-search{
     flex:2 1 320px; display:flex; align-items:center; gap:10px; padding:14px 18px; border-radius:14px;
@@ -899,6 +902,7 @@
         </div>
         <button class="hero-cta" id="f-search-btn" type="button">🔍 Rechercher</button>
       </div>
+      <div class="hero-hint">💬 Cherche ton service ci-dessous, clique dessus, et donne ton avis dessus en 2 minutes.</div>
 
       <div class="filters">
         <select id="f-region"><option value="">Toutes régions</option>${REGIONS.map(r=>`<option ${filterState.region===r?"selected":""}>${esc(r)}</option>`).join("")}</select>
