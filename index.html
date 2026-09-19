@@ -149,6 +149,15 @@
   .hero-suggest .pick-row .pi{ flex:none; font-size:15px; }
   .hero-suggest .pick-row .pt{ min-width:0; }
   .hero-suggest .pick-row .pt .sub{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hero-suggest .pick-row.group-label{ cursor:default; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding:8px 12px 4px; }
+  .hero-suggest .pick-row.group-label:hover{ background:none; }
+  .hero-suggest .pick-row.back-row{ color:var(--ink-soft); font-weight:600; }
+  .hero-suggest .pick-row.add-row{ color:var(--accent-strong); font-weight:600; }
+  .search-hint{
+    text-align:center; padding:28px 20px; color:var(--muted); border:1px dashed var(--border);
+    border-radius:14px; font-size:13.5px; line-height:1.5;
+  }
+  .search-hint b{ color:var(--ink-soft); }
 
   /* ---------- Stat strip ---------- */
   .stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px; background:var(--border);
@@ -902,7 +911,7 @@
         </div>
         <button class="hero-cta" id="f-search-btn" type="button">🔍 Rechercher</button>
       </div>
-      <div class="hero-hint">💬 Cherche ton service ci-dessous, clique dessus, et donne ton avis dessus en 2 minutes.</div>
+      <div class="hero-hint">💬 Tape le nom de ton établissement, choisis-le dans la liste, puis choisis ton service — et donne ton avis dessus en 2 minutes.</div>
 
       <div class="filters">
         <select id="f-region"><option value="">Toutes régions</option>${REGIONS.map(r=>`<option ${filterState.region===r?"selected":""}>${esc(r)}</option>`).join("")}</select>
@@ -949,9 +958,15 @@
     });
     document.getElementById("f-search-btn").onclick = () => runSearch();
     function runSearch(){
-      hideHeroSuggest();
       renderHomeList();
-      document.getElementById("home-list").scrollIntoView({ behavior:"smooth", block:"start" });
+      if (filterState.q && filterState.q.trim()) {
+        // Recherche texte : on garde le menu déroulant ouvert juste sous la barre, pas la peine
+        // de scroller puisqu'il n'y a plus de grille de vignettes à aller voir plus bas.
+        updateHeroSuggest();
+      } else {
+        hideHeroSuggest();
+        document.getElementById("home-list").scrollIntoView({ behavior:"smooth", block:"start" });
+      }
     }
     document.getElementById("f-region").onchange = (e) => { filterState.region = e.target.value; renderHomeList(); };
     document.getElementById("f-type").onchange = (e) => { filterState.type = e.target.value; renderHomeList(); };
@@ -985,50 +1000,97 @@
 
   // Suggestions en direct sous la barre de recherche (services + établissements sans service),
   // pour qu'on voie tout de suite qu'un établissement existe, sans avoir à descendre dans la page.
+  // Établissement actuellement "ouvert" dans le menu déroulant : une fois qu'on l'a choisi, le menu
+  // bascule sur la liste de ses services (en lignes de texte, pas en vignettes) plutôt que de
+  // renvoyer vers la grille de la page — cf. demande de Catherine du 20/09/2026.
+  let suggestEtabId = null;
+
   function updateHeroSuggest(){
     const box = document.getElementById("hero-suggest");
     if (!box) return;
     const q = filterState.q.trim().toLowerCase();
-    if (!q) { box.style.display = "none"; box.innerHTML = ""; return; }
+    if (!q) { box.style.display = "none"; box.innerHTML = ""; suggestEtabId = null; return; }
 
+    if (suggestEtabId) { renderEtabServicesSuggest(); return; }
+
+    const etabMatches = etablissements.filter(e => (e.nom+" "+(e.ville||"")).toLowerCase().includes(q)).slice(0, 8);
     const svMatches = services.filter(s => (s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).toLowerCase().includes(q)).slice(0, 6);
-    const etabIdsWithService = new Set(services.map(sv => sv.etablissementId));
-    const etabMatches = etablissements.filter(e => !etabIdsWithService.has(e.id) && (e.nom+" "+(e.ville||"")).toLowerCase().includes(q)).slice(0, 6);
 
-    if (!svMatches.length && !etabMatches.length) {
+    if (!etabMatches.length && !svMatches.length) {
       box.innerHTML = `<div class="pick-row" style="cursor:default;color:var(--muted)">Aucun résultat pour "${esc(filterState.q)}"</div>`;
       box.style.display = "";
       return;
     }
 
     box.innerHTML = [
+      etabMatches.length ? `<div class="pick-row group-label">Établissements — choisis le tien pour voir ses services</div>` : "",
+      ...etabMatches.map(e => {
+        const n = services.filter(s => s.etablissementId === e.id).length;
+        return `
+        <div class="pick-row" data-kind="etab" data-id="${esc(e.id)}">
+          <span class="pi">🏥</span>
+          <div class="pt"><div>${esc(e.nom)}</div><div class="sub">${esc(e.ville||"")} · ${n ? `${n} service${n>1?"s":""} référencé${n>1?"s":""}` : "aucun service référencé pour l'instant"}</div></div>
+        </div>`;
+      }),
+      svMatches.length ? `<div class="pick-row group-label">Ou directement un service</div>` : "",
       ...svMatches.map(s => `
         <div class="pick-row" data-kind="service" data-id="${esc(s.id)}">
           <span class="pi">🩺</span>
           <div class="pt"><div>${esc(s.nom)}</div><div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")} · ${s.nbTemoignages||0} témoignage${(s.nbTemoignages||0)>1?"s":""}</div></div>
-        </div>`),
-      ...etabMatches.map(e => `
-        <div class="pick-row" data-kind="etab" data-id="${esc(e.id)}">
-          <span class="pi">🏥</span>
-          <div class="pt"><div>${esc(e.nom)}</div><div class="sub">${esc(e.ville||"")} · pas encore de service référencé</div></div>
         </div>`)
     ].join("");
     box.style.display = "";
     box.querySelectorAll(".pick-row[data-kind]").forEach(row => row.onclick = () => {
-      hideHeroSuggest();
-      if (row.dataset.kind === "service") nav("#/service/"+row.dataset.id);
-      else nav("#/service-nouveau?etab="+encodeURIComponent(row.dataset.id));
+      if (row.dataset.kind === "service") { hideHeroSuggest(); nav("#/service/"+row.dataset.id); }
+      else { suggestEtabId = row.dataset.id; renderEtabServicesSuggest(); }
     });
   }
+
+  function renderEtabServicesSuggest(){
+    const box = document.getElementById("hero-suggest");
+    if (!box) return;
+    const etab = etablissements.find(e => e.id === suggestEtabId);
+    if (!etab) { suggestEtabId = null; updateHeroSuggest(); return; }
+    const svcs = services.filter(s => s.etablissementId === etab.id).sort((a,b)=>a.nom.localeCompare(b.nom));
+
+    box.innerHTML = `
+      <div class="pick-row back-row" data-back="1"><span class="pi">←</span><div class="pt">Autres établissements</div></div>
+      <div class="pick-row group-label">${esc(etab.nom)} · ${esc(etab.ville||"")} — choisis ton service</div>
+      ${svcs.map(s => `
+        <div class="pick-row" data-kind="service" data-id="${esc(s.id)}">
+          <span class="pi">🩺</span>
+          <div class="pt"><div>${esc(s.nom)}</div><div class="sub">${esc(s.typeService||"")}${s.nbLits?` · ${s.nbLits} lits`:""} · ${s.nbTemoignages||0} témoignage${(s.nbTemoignages||0)>1?"s":""}</div></div>
+        </div>`).join("") || `<div class="pick-row" style="cursor:default;color:var(--muted)">Aucun service référencé pour l'instant dans cet établissement.</div>`}
+      <div class="pick-row add-row" data-add="1"><span class="pi">➕</span><div class="pt">Ton service n'est pas dans la liste ? Ajoute-le</div></div>
+    `;
+    box.style.display = "";
+    box.querySelector(".back-row").onclick = () => { suggestEtabId = null; updateHeroSuggest(); };
+    box.querySelector(".add-row").onclick = () => { hideHeroSuggest(); nav("#/service-nouveau?etab="+encodeURIComponent(etab.id)); };
+    box.querySelectorAll(".pick-row[data-kind='service']").forEach(row => row.onclick = () => {
+      hideHeroSuggest();
+      nav("#/service/"+row.dataset.id);
+    });
+  }
+
   function hideHeroSuggest(){
     const box = document.getElementById("hero-suggest");
     if (box) { box.style.display = "none"; }
+    suggestEtabId = null;
   }
 
   function paintHomeList(list, unreferenced){
     const holder = document.getElementById("home-list");
     if (!holder) return;
     unreferenced = unreferenced || [];
+
+    // Dès qu'une recherche texte est en cours, on laisse le menu déroulant (établissement → ses
+    // services, en liste, pas en vignettes) faire le travail plutôt que d'empiler une grille de
+    // cartes en dessous — cf. demande de Catherine du 20/09/2026 ("c'est franchement imbuvable").
+    if (filterState.q && filterState.q.trim()) {
+      holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
+      return;
+    }
+
     if (!list.length && !unreferenced.length) {
       holder.innerHTML = `<div class="empty"><h3>Rien par ici pour l'instant</h3><p>Élargis les filtres, ou ajoute toi-même le service que tu cherches — 1 minute chrono.</p></div>`;
       return;
