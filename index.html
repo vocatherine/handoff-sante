@@ -566,6 +566,24 @@
   // naturel sur un clavier/téléphone) ne matchait pas "Hôpital Édouard Herriot" — cf. retour de
   // Catherine du 20/09/2026.
   const normSearch = (s) => String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  // Abréviations courantes qu'on retrouve dans les noms d'établissements — sans ça "st joseph" ne
+  // retrouvait pas "Saint Joseph". Appliqué après normSearch, donc sur du texte déjà sans accents.
+  const expandAbbrev = (s) => s
+    .replace(/\bste\b/g, "sainte")
+    .replace(/\bst\b/g, "saint")
+    .replace(/\bchru\b/g, "centre hospitalier regional universitaire")
+    .replace(/\bchu\b/g, "centre hospitalier universitaire")
+    .replace(/\bch\b/g, "centre hospitalier")
+    .replace(/\bhcl\b/g, "hospices civils de lyon");
+  // Recherche tolérante : chaque mot tapé doit se retrouver quelque part dans le texte cible, peu
+  // importe l'ordre — "saint luc joseph" retrouve "Saint Joseph Saint Luc", et les abréviations
+  // usuelles ("st", "chu"...) sont reconnues. Cf. demande de Catherine du 21/09/2026.
+  const matchSearch = (haystack, query) => {
+    const h = expandAbbrev(normSearch(haystack));
+    const q = expandAbbrev(normSearch(query)).trim();
+    if (!q) return true;
+    return q.split(/\s+/).filter(Boolean).every(w => h.includes(w));
+  };
   // Code de gestion : comme il n'y a aucun compte ni identifiant lié à un témoignage (anonymat total),
   // c'est le SEUL moyen pour son auteur·e de le retrouver ensuite pour le modifier ou le supprimer.
   // Affiché une seule fois à la publication — Handoff Santé ne peut pas le retrouver pour toi si tu le perds.
@@ -891,8 +909,7 @@
 
     let list = services.slice();
     if (filterState.q) {
-      const q = normSearch(filterState.q);
-      list = list.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(q));
+      list = list.filter(s => matchSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||""), filterState.q));
     }
     if (filterState.region) list = list.filter(s => s.etablissementRegion === filterState.region);
     if (filterState.type) list = list.filter(s => s.typeService === filterState.type);
@@ -980,7 +997,7 @@
 
     function renderHomeList(){
       let l = services.slice();
-      if (filterState.q) { const q=normSearch(filterState.q); l = l.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(q)); }
+      if (filterState.q) { l = l.filter(s => matchSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||""), filterState.q)); }
       if (filterState.region) l = l.filter(s => s.etablissementRegion === filterState.region);
       if (filterState.type) l = l.filter(s => s.typeService === filterState.type);
       if (filterState.onlyFlagged) l = l.filter(s => (s.flagMaltraitance||0)+(s.flagHarcelement||0)+(s.flagRacisme||0) > 0);
@@ -995,9 +1012,8 @@
   // services), alors même qu'ils existent bien dans l'annuaire (import FINESS notamment).
   function unreferencedEtabsForQuery(q, region, type, onlyFlagged){
     if (!q || type || onlyFlagged) return []; // le type de SERVICE et "signalements" ne s'appliquent pas à un établissement sans service
-    const query = normSearch(q);
     const etabIdsWithService = new Set(services.map(sv => sv.etablissementId));
-    let matched = etablissements.filter(e => !etabIdsWithService.has(e.id) && normSearch(e.nom+" "+(e.ville||"")).includes(query));
+    let matched = etablissements.filter(e => !etabIdsWithService.has(e.id) && matchSearch(e.nom+" "+(e.ville||""), q));
     if (region) matched = matched.filter(e => e.region === region);
     return matched.slice(0, 8);
   }
@@ -1012,13 +1028,13 @@
   function updateHeroSuggest(){
     const box = document.getElementById("hero-suggest");
     if (!box) return;
-    const q = normSearch(filterState.q.trim());
-    if (!q) { box.style.display = "none"; box.innerHTML = ""; suggestEtabId = null; return; }
+    const qRaw = filterState.q.trim();
+    if (!qRaw) { box.style.display = "none"; box.innerHTML = ""; suggestEtabId = null; return; }
 
     if (suggestEtabId) { renderEtabServicesSuggest(); return; }
 
-    const etabMatches = etablissements.filter(e => normSearch(e.nom+" "+(e.ville||"")).includes(q)).slice(0, 8);
-    const svMatches = services.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(q));
+    const etabMatches = etablissements.filter(e => matchSearch(e.nom+" "+(e.ville||""), qRaw)).slice(0, 8);
+    const svMatches = services.filter(s => matchSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||""), qRaw));
 
     if (!etabMatches.length && !svMatches.length) {
       box.innerHTML = `<div class="pick-row" style="cursor:default;color:var(--muted)">Aucun résultat pour "${esc(filterState.q)}"</div>`;
@@ -1690,7 +1706,7 @@
 
     function updateEtabResults(){
       // Only touches the results list — never the input — so the cursor and focus survive typing.
-      const results = etabQuery.length ? etablissements.filter(e => normSearch(e.nom+" "+(e.ville||"")).includes(normSearch(etabQuery))).slice(0,8) : [];
+      const results = etabQuery.length ? etablissements.filter(e => matchSearch(e.nom+" "+(e.ville||""), etabQuery)).slice(0,8) : [];
       const resultsEl = document.getElementById("etab-results");
       resultsEl.innerHTML = results.map(e =>
         `<div class="pick-row" data-id="${esc(e.id)}">🏥 ${esc(e.nom)}<div class="sub">${esc(e.ville||"")} · ${esc(e.type||"")}</div></div>`).join("");
@@ -1887,9 +1903,9 @@
       const updateResults = () => {
         const resultsEl = document.getElementById("svc-results");
         if (!q.length) { resultsEl.innerHTML = ""; return; }
-        const svcResults = services.filter(s => normSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||"")).includes(normSearch(q))).slice(0,8);
+        const svcResults = services.filter(s => matchSearch(s.nom+" "+s.etablissementNom+" "+(s.etablissementVille||""), q)).slice(0,8);
         const etabIdsWithService = new Set(services.map(sv => sv.etablissementId));
-        const etabResults = etablissements.filter(e => !etabIdsWithService.has(e.id) && normSearch(e.nom+" "+(e.ville||"")).includes(normSearch(q))).slice(0,6);
+        const etabResults = etablissements.filter(e => !etabIdsWithService.has(e.id) && matchSearch(e.nom+" "+(e.ville||""), q)).slice(0,6);
         resultsEl.innerHTML = [
           ...svcResults.map(s=>`<div class="pick-row" data-kind="svc" data-id="${esc(s.id)}">🩺 ${esc(s.nom)}<div class="sub">${esc(s.etablissementNom)} · ${esc(s.etablissementVille||"")} · ${s.nbTemoignages||0} témoignage${(s.nbTemoignages||0)>1?"s":""}</div></div>`),
           ...etabResults.map(e=>`<div class="pick-row" data-kind="etab" data-id="${esc(e.id)}">🏥 ${esc(e.nom)}<div class="sub">${esc(e.ville||"")} · pas encore de service référencé — clique pour l'ajouter</div></div>`)
