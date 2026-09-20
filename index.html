@@ -1087,27 +1087,11 @@
     if (!holder) return;
     unreferenced = unreferenced || [];
 
-    // Dès qu'une recherche texte est en cours, on laisse le menu déroulant (établissement → ses
-    // services, en liste, pas en vignettes) faire le travail plutôt que d'empiler une grille de
-    // cartes en dessous — cf. demande de Catherine du 20/09/2026 ("c'est franchement imbuvable").
-    if (filterState.q && filterState.q.trim()) {
-      holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
-      return;
-    }
-
-    if (!list.length && !unreferenced.length) {
-      holder.innerHTML = `<div class="empty"><h3>Rien par ici pour l'instant</h3><p>Élargis les filtres, ou ajoute toi-même le service que tu cherches — 1 minute chrono.</p></div>`;
-      return;
-    }
-    const gridHtml = list.length ? `<div class="grid">${list.map(cardHtml).join("")}</div>` : "";
-    const unrefHtml = unreferenced.length ? `
-      <div class="unref-section">
-        <div class="unref-title">Ces établissements existent mais n'ont encore aucun service référencé — sois le·la premier·ère à en ajouter un :</div>
-        <div class="grid">${unreferenced.map(unrefEtabCardHtml).join("")}</div>
-      </div>` : "";
-    holder.innerHTML = gridHtml + unrefHtml;
-    holder.querySelectorAll(".card[data-id]").forEach(c => c.onclick = () => nav("#/service/"+c.dataset.id));
-    holder.querySelectorAll(".unref-card").forEach(c => c.onclick = () => nav("#/service-nouveau?etab="+encodeURIComponent(c.dataset.etabId)));
+    // On ne montre plus jamais la grille de vignettes en dessous de la recherche — qu'il y ait une
+    // requête en cours ou non — pour laisser le menu déroulant (établissement → ses services, en
+    // liste) faire tout le travail. Cf. demandes de Catherine du 20/09/2026 ("c'est franchement
+    // imbuvable") et du lendemain ("ça fait vraiment chargé").
+    holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
   }
 
   function unrefEtabCardHtml(e){
