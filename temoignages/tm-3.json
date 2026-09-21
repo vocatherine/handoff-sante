@@ -1,0 +1,23 @@
+{
+  "commentaire": "Charge de travail correcte le jour, plus compliquée la nuit avec seulement 3 soignants pour 12 lits de réa.",
+  "createdAt": "2025-09-10T09:00:00Z",
+  "dateMission": "2025-09",
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "harcelement": true,
+  "harcelementDetail": "Remarques déplacées répétées d'un médecin senior envers les AS, jamais suivies malgré un signalement au cadre.",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 2,
+  "noteCharge": 2,
+  "noteDirection": 2,
+  "noteRemuneration": 3,
+  "profession": "Aide-soignant·e (AS)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-reanimation-herriot",
+  "serviceNom": "Réanimation polyvalente",
+  "signalements": 0,
+  "statut": "CDD",
+  "ville": "Lyon"
+}

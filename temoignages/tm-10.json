@@ -1,0 +1,23 @@
+{
+  "commentaire": "Cadre agréable, matériel récent, quelques tensions ponctuelles en période de forte activité.",
+  "createdAt": "2025-07-02T09:00:00Z",
+  "dateMission": "2025-07",
+  "etablissementId": "etab-clinique-parc",
+  "etablissementNom": "Clinique du Parc",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 4,
+  "noteCharge": 3,
+  "noteDirection": 4,
+  "noteRemuneration": 4,
+  "profession": "Aide-soignant·e (AS)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-chirurgie-parc",
+  "serviceNom": "Chirurgie orthopédique",
+  "signalements": 0,
+  "statut": "Titulaire / CDI",
+  "ville": "Lyon"
+}

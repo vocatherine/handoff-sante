@@ -1,0 +1,23 @@
+{
+  "commentaire": "Service très formateur mais sous-effectif chronique la nuit, il faut être autonome rapidement.",
+  "createdAt": "2025-11-20T09:00:00Z",
+  "dateMission": "2025-11",
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 3,
+  "noteCharge": 2,
+  "noteDirection": 2,
+  "noteRemuneration": 4,
+  "profession": "Infirmier·ère (IDE)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-reanimation-herriot",
+  "serviceNom": "Réanimation polyvalente",
+  "signalements": 0,
+  "statut": "Vacataire / intérim",
+  "ville": "Lyon"
+}

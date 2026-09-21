@@ -1,0 +1,23 @@
+{
+  "commentaire": "Très bonne organisation, équipe stable, rémunération correcte pour du privé.",
+  "createdAt": "2025-12-08T09:00:00Z",
+  "dateMission": "2025-12",
+  "etablissementId": "etab-clinique-parc",
+  "etablissementNom": "Clinique du Parc",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 4,
+  "noteCharge": 4,
+  "noteDirection": 4,
+  "noteRemuneration": 5,
+  "profession": "Infirmier·ère (IDE)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-chirurgie-parc",
+  "serviceNom": "Chirurgie orthopédique",
+  "signalements": 0,
+  "statut": "Vacataire / intérim",
+  "ville": "Lyon"
+}

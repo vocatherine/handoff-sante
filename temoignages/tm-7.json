@@ -1,0 +1,23 @@
+{
+  "commentaire": "Ambiance pesante, beaucoup de turn-over, mais les résidents restent bien suivis médicalement.",
+  "createdAt": "2025-05-14T09:00:00Z",
+  "dateMission": "2025-05",
+  "etablissementId": "etab-tilleuls",
+  "etablissementNom": "EHPAD Accueil des Buers",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 2,
+  "noteCharge": 2,
+  "noteDirection": 2,
+  "noteRemuneration": 3,
+  "profession": "Infirmier·ère (IDE)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-alzheimer-tilleuls",
+  "serviceNom": "Unité Alzheimer",
+  "signalements": 0,
+  "statut": "CDD",
+  "ville": "Villeurbanne"
+}

@@ -1,0 +1,23 @@
+{
+  "commentaire": "Encadrement des internes correct, direction à l'écoute sur les effectifs après plusieurs alertes.",
+  "createdAt": "2025-03-22T09:00:00Z",
+  "dateMission": "2025-03",
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 4,
+  "noteCharge": 3,
+  "noteDirection": 4,
+  "noteRemuneration": 3,
+  "profession": "Médecin",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-urgences-herriot",
+  "serviceNom": "Service des urgences adultes",
+  "signalements": 0,
+  "statut": "Titulaire / CDI",
+  "ville": "Lyon"
+}

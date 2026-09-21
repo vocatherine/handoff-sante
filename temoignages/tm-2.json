@@ -1,0 +1,23 @@
+{
+  "commentaire": "Équipe soudée, cadre de santé disponible. Bon stage pour apprendre la réa.",
+  "createdAt": "2025-06-15T09:00:00Z",
+  "dateMission": "2025-06",
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 4,
+  "noteCharge": 3,
+  "noteDirection": 4,
+  "noteRemuneration": null,
+  "profession": "Étudiant·e IFSI",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-reanimation-herriot",
+  "serviceNom": "Réanimation polyvalente",
+  "signalements": 0,
+  "statut": "Stage / mise en situation",
+  "ville": "Lyon"
+}

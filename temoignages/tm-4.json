@@ -1,0 +1,23 @@
+{
+  "commentaire": "Rythme très soutenu, afflux imprévisible, mais bonne entraide entre soignants.",
+  "createdAt": "2026-01-18T09:00:00Z",
+  "dateMission": "2026-01",
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 3,
+  "noteCharge": 2,
+  "noteDirection": 3,
+  "noteRemuneration": 4,
+  "profession": "Infirmier·ère (IDE)",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-urgences-herriot",
+  "serviceNom": "Service des urgences adultes",
+  "signalements": 0,
+  "statut": "Vacataire / intérim",
+  "ville": "Lyon"
+}

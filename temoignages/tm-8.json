@@ -1,0 +1,23 @@
+{
+  "commentaire": "Stage difficile émotionnellement, peu de temps pour accompagner correctement chaque résident.",
+  "createdAt": "2025-02-11T09:00:00Z",
+  "dateMission": "2025-02",
+  "etablissementId": "etab-tilleuls",
+  "etablissementNom": "EHPAD Accueil des Buers",
+  "harcelement": false,
+  "harcelementDetail": "",
+  "maltraitance": false,
+  "maltraitanceDetail": "",
+  "noteAmbiance": 3,
+  "noteCharge": 2,
+  "noteDirection": 2,
+  "noteRemuneration": null,
+  "profession": "Étudiant·e AS/AES",
+  "racisme": false,
+  "racismeDetail": "",
+  "serviceId": "svc-alzheimer-tilleuls",
+  "serviceNom": "Unité Alzheimer",
+  "signalements": 0,
+  "statut": "Stage / mise en situation",
+  "ville": "Villeurbanne"
+}
