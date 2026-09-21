@@ -2772,12 +2772,33 @@
       for (const t of items) { await analyzeOne(t); }
       bulkBtn.textContent = "✦ Analyser tout avec l'IA"; bulkBtn.disabled = false;
     };
-    list.querySelectorAll(".mod-gravite").forEach(sel => sel.onchange = async () => {
-      const val = sel.value === "" ? null : Number(sel.value);
-      await db.collection("temoignages").doc(sel.dataset.id).update({
-        graviteModeration: val, graviteModerationAt: new Date().toISOString()
-      });
-      renderModeration(app);
+    list.querySelectorAll(".mod-gravite").forEach(sel => {
+      const field = sel.closest(".field");
+      let statusEl = field.querySelector(".mod-gravite-status");
+      if (!statusEl) {
+        statusEl = document.createElement("div");
+        statusEl.className = "mod-gravite-status hint";
+        statusEl.style.marginTop = "4px";
+        field.appendChild(statusEl);
+      }
+      sel.onchange = async () => {
+        const val = sel.value === "" ? null : Number(sel.value);
+        sel.disabled = true;
+        statusEl.style.color = "var(--ink-soft)";
+        statusEl.textContent = "Enregistrement…";
+        try {
+          await db.collection("temoignages").doc(sel.dataset.id).update({
+            graviteModeration: val, graviteModerationAt: new Date().toISOString()
+          });
+          statusEl.style.color = "var(--accent-strong)";
+          statusEl.textContent = "✓ Enregistré";
+          setTimeout(() => renderModeration(app), 900);
+        } catch(e) {
+          sel.disabled = false;
+          statusEl.style.color = "var(--critical)";
+          statusEl.textContent = "⚠ Échec de l'enregistrement (colonne manquante en base ou connexion) — réessaie, et préviens Catherine si ça persiste.";
+        }
+      };
     });
     list.querySelectorAll(".mod-verify").forEach(btn => btn.onclick = async () => {
       await db.collection("temoignages").doc(btn.dataset.id).update({
