@@ -399,6 +399,10 @@
   .tc-axis-label{ font-size:10px; color:var(--muted); margin-top:6px; font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
   .tc-table-toggle{ margin-top:8px; }
   .tc-table-toggle summary{ font-size:12.5px; color:var(--accent-strong); font-weight:600; cursor:pointer; }
+  .mod-accordion{ margin-bottom:10px; }
+  .mod-accordion summary{ font-size:15px; }
+  .mod-accordion summary .badge{ margin-left:4px; }
+  .mod-accordion .faq-a{ max-width:none; }
 
   .support-card{ display:flex; gap:14px; align-items:flex-start; background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:14px; padding:16px 18px; margin-bottom:24px; }
   .support-card .support-icon{ font-size:22px; flex:none; line-height:1; }
@@ -2759,6 +2763,24 @@
     `;
   }
 
+  // Aperçu texte d'un témoignage en modération : avant, seul le champ "commentaire" libre était affiché,
+  // donc un témoignage qui n'avait rempli que "points positifs"/"points à améliorer" (deux champs séparés
+  // du formulaire) apparaissait vide, illisible — corrigé le 21/09/2026 pour combiner les trois.
+  function temoignagePreviewHtml(t, maxLen, colorVar){
+    maxLen = maxLen || 400;
+    colorVar = colorVar || "var(--ink-soft)";
+    const parts = [];
+    if (t.commentaire) parts.push(t.commentaire);
+    if (t.pointsPositifs) parts.push("👍 " + t.pointsPositifs);
+    if (t.pointsAmeliorer) parts.push("🔧 " + t.pointsAmeliorer);
+    if (!parts.length) {
+      return `<p style="font-size:13px; margin:8px 0 0; color:var(--muted); font-style:italic;">(pas de texte écrit — uniquement des notes chiffrées)</p>`;
+    }
+    let text = parts.join("  ·  ");
+    if (text.length > maxLen) text = text.slice(0, maxLen) + "…";
+    return `<p style="font-size:13px; margin:8px 0 0; color:${colorVar};">${esc(text)}</p>`;
+  }
+
   // ---------------------------------------------------------------- MODÉRATION (admin uniquement, ?admin=1)
   async function renderModeration(app){
     if (!isAdminMode()) {
@@ -2808,35 +2830,63 @@
       <div class="pagehead about">
         <div class="eyebrow">Mode admin</div>
         <h1>🛡 Modération</h1>
-        <p class="lede">Témoignages signalés par la communauté (3 signalements = masqué automatiquement) et signalements graves — à traiter ici en attendant un vrai système de rôles. La décision finale reste toujours humaine — l'IA aide juste à trier plus vite. Tu peux aussi noter une gravité de 0 à 5 sur chaque signalement (inspiré de la plateforme étudiante GELULES) pour prioriser ta lecture au fil du temps.</p>
+        <p class="lede">Témoignages signalés par la communauté (3 signalements = masqué automatiquement) et signalements graves — à traiter ici en attendant un vrai système de rôles. La décision finale reste toujours humaine — l'IA aide juste à trier plus vite. Tu peux aussi noter une gravité de 0 à 5 sur chaque signalement (inspiré de la plateforme étudiante GELULES) pour prioriser ta lecture au fil du temps. Clique sur chaque titre pour déplier ou replier la section.</p>
 
-        <h2>📈 Trafic du site</h2>
-        <div class="ar-live" style="margin-bottom:14px"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur le site en ce moment</div>
-        <div id="mod-traffic-chart"></div>
-
-        <h2>Témoignages à traiter</h2>
-        ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
-        <h2>Demandes de droit de réponse en attente</h2>
-        <p class="hint" style="margin-top:-6px">Vérifie que le·la demandeur·se représente bien l'établissement (email professionnel, recherche rapide) et que le texte ne cherche pas à identifier l'auteur·e anonyme, avant de publier.</p>
-        ${reponsesPending.length === 0 ? `<p class="hint">Aucune demande en attente.</p>` : `<div class="roadmap" id="mod-reponses-list"></div>`}
-        <h2>💡 Suggestions reçues</h2>
-        ${suggestionsNouvelles.length === 0 ? `<p class="hint">Aucune nouvelle suggestion.</p>` : `<div class="roadmap" id="mod-suggestions-list"></div>`}
-        <h2>💛 Avis des soignants sur l'appli elle-même</h2>
-        <p class="hint" style="margin-top:-6px">Recueilli juste après un dépôt de témoignage, une fois par appareil — pour suivre dans le temps si l'appli plaît, indépendamment des avis sur les services.</p>
-        ${avisApp.length === 0 ? `<p class="hint">Aucun avis pour l'instant.</p>` : `
-          <div class="stats" style="margin-bottom:14px;">
-            <div class="stat"><div class="n">${avisAppMoyenne}/5</div><div class="l">Note moyenne</div></div>
-            <div class="stat"><div class="n">${avisApp.length}</div><div class="l">Avis reçus</div></div>
+        <details class="faq-item mod-accordion">
+          <summary>📈 Trafic du site <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <div class="ar-live" style="margin-bottom:14px"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur le site en ce moment</div>
+            <div id="mod-traffic-chart"></div>
           </div>
-          <div class="roadmap">${avisApp.filter(a=>a.commentaire).slice(0,20).map(a => `
-            <div class="roadstep">
-              <span class="idx">${a.note}/5</span>
-              <div><span>${esc(recencyLabelPublish(a.createdAt)||"")}</span><p style="font-size:13px; margin:6px 0 0; color:var(--ink)">${esc(a.commentaire)}</p></div>
-            </div>
-          `).join("")}</div>`}
-        <h2>🕓 Derniers témoignages reçus</h2>
-        <p class="hint" style="margin-top:-6px">Vue lecture seule, pour garder un œil sur ce qui arrive — traités automatiquement sans relecture préalable, seulement retenus ${PUBLICATION_DELAI_H}h avant apparition publique (délai d'anonymat, pas une validation éditoriale — voir plus haut ci-dessus pour les signalés).</p>
-        ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
+        </details>
+
+        <details class="faq-item mod-accordion" open>
+          <summary>🚩 Témoignages à traiter ${items.length ? `<span class="badge warn">${items.length}</span>` : ""} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion">
+          <summary>✉️ Demandes de droit de réponse ${reponsesPending.length ? `<span class="badge warn">${reponsesPending.length}</span>` : ""} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Vérifie que le·la demandeur·se représente bien l'établissement (email professionnel, recherche rapide) et que le texte ne cherche pas à identifier l'auteur·e anonyme, avant de publier.</p>
+            ${reponsesPending.length === 0 ? `<p class="hint">Aucune demande en attente.</p>` : `<div class="roadmap" id="mod-reponses-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion">
+          <summary>💡 Suggestions reçues ${suggestionsNouvelles.length ? `<span class="badge warn">${suggestionsNouvelles.length}</span>` : ""} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            ${suggestionsNouvelles.length === 0 ? `<p class="hint">Aucune nouvelle suggestion.</p>` : `<div class="roadmap" id="mod-suggestions-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion">
+          <summary>💛 Avis des soignants sur l'appli ${avisApp.length ? `<span class="badge muted">${avisApp.length}</span>` : ""} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Recueilli juste après un dépôt de témoignage, une fois par appareil — pour suivre dans le temps si l'appli plaît, indépendamment des avis sur les services.</p>
+            ${avisApp.length === 0 ? `<p class="hint">Aucun avis pour l'instant.</p>` : `
+              <div class="stats" style="margin-bottom:14px;">
+                <div class="stat"><div class="n">${avisAppMoyenne}/5</div><div class="l">Note moyenne</div></div>
+                <div class="stat"><div class="n">${avisApp.length}</div><div class="l">Avis reçus</div></div>
+              </div>
+              <div class="roadmap">${avisApp.filter(a=>a.commentaire).slice(0,20).map(a => `
+                <div class="roadstep">
+                  <span class="idx">${a.note}/5</span>
+                  <div><span>${esc(recencyLabelPublish(a.createdAt)||"")}</span><p style="font-size:13px; margin:6px 0 0; color:var(--ink)">${esc(a.commentaire)}</p></div>
+                </div>
+              `).join("")}</div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion">
+          <summary>🕓 Derniers témoignages reçus ${recent.length ? `<span class="badge muted">${recent.length}</span>` : ""} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Vue lecture seule, pour garder un œil sur ce qui arrive — traités automatiquement sans relecture préalable, seulement retenus ${PUBLICATION_DELAI_H}h avant apparition publique (délai d'anonymat, pas une validation éditoriale — voir plus haut ci-dessus pour les signalés).</p>
+            ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
+          </div>
+        </details>
       </div>
     `;
     paintTrafficChart(visitesRows);
@@ -2894,7 +2944,7 @@
           <div style="flex:1">
             <b>${esc(t.serviceNom)} — ${esc(t.etablissementNom)} ${esc(t.ville||"")}</b>${t.moderationVerified ? ` <span class="verified-badge">✓ Vérifié</span>` : ""}${!isPublished(t) ? ` <span class="verified-badge" style="background:var(--warn-bg);color:var(--warn-strong)">🕓 ${esc(publicationRemainingLabel(t))}</span>` : ""}
             <span>${esc(t.profession||"?")} · ${esc(t.statut||"?")} · ${esc(recencyLabelPublish(t.createdAt)||"")}</span>
-            ${t.commentaire ? `<p style="font-size:13px; margin:8px 0 0; color:var(--ink-soft)">${esc(t.commentaire.length>160 ? t.commentaire.slice(0,160)+"…" : t.commentaire)}</p>` : ""}
+            ${temoignagePreviewHtml(t, 200)}
             <div style="display:flex; gap:10px; margin-top:8px;">
               <a class="btn-text" href="#/service/${esc(t.serviceId)}">Voir le service</a>
             </div>
@@ -2910,7 +2960,7 @@
         <div style="flex:1">
           <b>${esc(t.serviceNom)} — ${esc(t.etablissementNom)} ${esc(t.ville||"")}</b>${t.moderationVerified ? ` <span class="verified-badge">✓ Vérifié</span>` : ""}${!isPublished(t) ? ` <span class="verified-badge" style="background:var(--warn-bg);color:var(--warn-strong)">🕓 ${esc(publicationRemainingLabel(t))}</span>` : ""}${t.graviteModeration!=null ? ` <span class="verified-badge" style="background:var(--critical-bg);color:var(--critical)">Gravité ${t.graviteModeration}/5</span>` : ""}
           <span>${esc(t.profession||"?")} · ${esc(t.statut||"?")} · ${t.signalements||0} signalement(s)${t.maltraitance?" · maltraitance":""}${t.harcelement?" · harcèlement":""}${t.racisme?" · racisme":""}</span>
-          <p style="font-size:13px; margin:8px 0 0; color:var(--ink)">${esc(t.commentaire||"(pas de commentaire)")}</p>
+          ${temoignagePreviewHtml(t, 600, "var(--ink)")}
           ${t.maltraitanceDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Maltraitance : ${esc(t.maltraitanceDetail)}</p>` : ""}
           ${t.harcelementDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Harcèlement : ${esc(t.harcelementDetail)}</p>` : ""}
           ${t.racismeDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Racisme : ${esc(t.racismeDetail)}</p>` : ""}
