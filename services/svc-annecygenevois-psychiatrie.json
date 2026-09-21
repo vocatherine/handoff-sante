@@ -1,0 +1,33 @@
+{
+  "aiSummary": null,
+  "aiSummaryAt": null,
+  "aiSummaryBasedOn": 0,
+  "avgAmbiance": null,
+  "avgCharge": null,
+  "avgDirection": null,
+  "avgGlobal": null,
+  "avgRemuneration": null,
+  "createdAt": "2026-09-16T00:00:00.000Z",
+  "effectifsJour": {
+    "as": 0,
+    "ide": 0,
+    "medecin": 0
+  },
+  "effectifsNuit": {
+    "as": 0,
+    "ide": 0,
+    "medecin": 0
+  },
+  "etablissementId": "etab-ch-annecy-genevois",
+  "etablissementNom": "Centre Hospitalier Annecy Genevois",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "Hôpital public",
+  "etablissementVille": "Epagny Metz-Tessy",
+  "flagHarcelement": 0,
+  "flagMaltraitance": 0,
+  "flagRacisme": 0,
+  "nbLits": null,
+  "nbTemoignages": 0,
+  "nom": "Psychiatrie secteur 74 G03 (secteur d'Annecy) — CH Annecy Genevois",
+  "typeService": "Psychiatrie"
+}

@@ -1,0 +1,45 @@
+{
+  "aiSummary": {
+    "points_forts": [
+      "Résidents bien suivis médicalement selon un témoignage IDE"
+    ],
+    "points_vigilance": [
+      "Signalement d'un ratio soignant/résidents jugé très insuffisant certaines nuits (1 pour 28)",
+      "Ambiance de travail décrite comme pesante avec un turn-over important",
+      "Temps disponible pour l'accompagnement individuel des résidents jugé insuffisant, notamment en stage"
+    ],
+    "synthese": "Les témoignages décrivent un service marqué par une charge de travail élevée, notamment la nuit, et une ambiance globalement pesante avec un fort turn-over. Le suivi médical des résidents est néanmoins souligné comme un point positif, malgré un temps d'accompagnement jugé insuffisant par une étudiante en stage."
+  },
+  "aiSummaryAt": "2026-09-15T12:25:00.104Z",
+  "aiSummaryBasedOn": 3,
+  "avgAmbiance": 2.3,
+  "avgCharge": 1.7,
+  "avgDirection": 1.7,
+  "avgGlobal": 1.9,
+  "avgRemuneration": 2.5,
+  "createdAt": "2026-06-07T08:00:00Z",
+  "effectifsJour": {
+    "as": 3,
+    "ide": 1,
+    "medecin": 0
+  },
+  "effectifsNuit": {
+    "as": 2,
+    "ide": 0,
+    "medecin": 0
+  },
+  "etablissementId": "etab-tilleuls",
+  "etablissementNom": "EHPAD Accueil des Buers",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "EHPAD",
+  "etablissementVille": "Villeurbanne",
+  "flagHarcelement": 0,
+  "flagMaltraitance": 1,
+  "flagRacisme": 0,
+  "nbLits": 28,
+  "nbSoignantsJour": 4,
+  "nbSoignantsNuit": 2,
+  "nbTemoignages": 3,
+  "nom": "Unité Alzheimer",
+  "typeService": "Gériatrie / EHPAD"
+}

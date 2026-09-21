@@ -1,0 +1,33 @@
+{
+  "aiSummary": null,
+  "aiSummaryAt": null,
+  "aiSummaryBasedOn": 0,
+  "avgAmbiance": null,
+  "avgCharge": null,
+  "avgDirection": null,
+  "avgGlobal": null,
+  "avgRemuneration": null,
+  "createdAt": "2026-09-16T00:00:00.000Z",
+  "effectifsJour": {
+    "as": 0,
+    "ide": 0,
+    "medecin": 0
+  },
+  "effectifsNuit": {
+    "as": 0,
+    "ide": 0,
+    "medecin": 0
+  },
+  "etablissementId": "etab-hopitaux-nord-ouest-villefranche",
+  "etablissementNom": "Hôpitaux Nord-Ouest",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "Hôpital public",
+  "etablissementVille": "Villefranche-sur-Saône",
+  "flagHarcelement": 0,
+  "flagMaltraitance": 0,
+  "flagRacisme": 0,
+  "nbLits": null,
+  "nbTemoignages": 0,
+  "nom": "Maternité — Hôpitaux Nord-Ouest",
+  "typeService": "Maternité"
+}

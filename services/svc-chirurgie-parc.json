@@ -1,0 +1,35 @@
+{
+  "aiSummary": null,
+  "aiSummaryAt": null,
+  "aiSummaryBasedOn": 0,
+  "avgAmbiance": 4,
+  "avgCharge": 3.5,
+  "avgDirection": 4,
+  "avgGlobal": 3.8,
+  "avgRemuneration": 4.5,
+  "createdAt": "2026-06-08T08:00:00Z",
+  "effectifsJour": {
+    "as": 1,
+    "ide": 3,
+    "medecin": 1
+  },
+  "effectifsNuit": {
+    "as": 1,
+    "ide": 1,
+    "medecin": 0
+  },
+  "etablissementId": "etab-clinique-parc",
+  "etablissementNom": "Clinique du Parc",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "Clinique privée",
+  "etablissementVille": "Lyon",
+  "flagHarcelement": 0,
+  "flagMaltraitance": 0,
+  "flagRacisme": 0,
+  "nbLits": 18,
+  "nbSoignantsJour": 5,
+  "nbSoignantsNuit": 2,
+  "nbTemoignages": 2,
+  "nom": "Chirurgie orthopédique",
+  "typeService": "Chirurgie"
+}

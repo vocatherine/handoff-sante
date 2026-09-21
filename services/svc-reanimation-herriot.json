@@ -1,0 +1,35 @@
+{
+  "aiSummary": null,
+  "aiSummaryAt": null,
+  "aiSummaryBasedOn": 0,
+  "avgAmbiance": 3,
+  "avgCharge": 2.3,
+  "avgDirection": 2.7,
+  "avgGlobal": 2.7,
+  "avgRemuneration": 3.5,
+  "createdAt": "2026-06-05T08:00:00Z",
+  "effectifsJour": {
+    "as": 1,
+    "ide": 4,
+    "medecin": 1
+  },
+  "effectifsNuit": {
+    "as": 1,
+    "ide": 2,
+    "medecin": 0
+  },
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "Hôpital public",
+  "etablissementVille": "Lyon",
+  "flagHarcelement": 1,
+  "flagMaltraitance": 0,
+  "flagRacisme": 0,
+  "nbLits": 12,
+  "nbSoignantsJour": 6,
+  "nbSoignantsNuit": 3,
+  "nbTemoignages": 3,
+  "nom": "Réanimation polyvalente",
+  "typeService": "Réanimation / USC"
+}

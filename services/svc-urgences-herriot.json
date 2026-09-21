@@ -1,0 +1,35 @@
+{
+  "aiSummary": null,
+  "aiSummaryAt": null,
+  "aiSummaryBasedOn": 0,
+  "avgAmbiance": 3.5,
+  "avgCharge": 2.5,
+  "avgDirection": 3.5,
+  "avgGlobal": 3.2,
+  "avgRemuneration": 3.5,
+  "createdAt": "2026-06-06T08:00:00Z",
+  "effectifsJour": {
+    "as": 2,
+    "ide": 5,
+    "medecin": 1
+  },
+  "effectifsNuit": {
+    "as": 1,
+    "ide": 3,
+    "medecin": 0
+  },
+  "etablissementId": "etab-herriot",
+  "etablissementNom": "Hôpital Édouard Herriot (CHU de Lyon)",
+  "etablissementRegion": "Auvergne-Rhône-Alpes",
+  "etablissementType": "Hôpital public",
+  "etablissementVille": "Lyon",
+  "flagHarcelement": 0,
+  "flagMaltraitance": 0,
+  "flagRacisme": 0,
+  "nbLits": 20,
+  "nbSoignantsJour": 8,
+  "nbSoignantsNuit": 4,
+  "nbTemoignages": 2,
+  "nom": "Service des urgences adultes",
+  "typeService": "Urgences"
+}
