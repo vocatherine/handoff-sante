@@ -23,7 +23,7 @@ Tout est dans ce fichier unique : HTML, CSS (dans une balise `<style>`), et JS (
 - **Supabase** (PostgreSQL) est la base de données, interrogée directement depuis le front en JS via `window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)` (client `@supabase/supabase-js` chargé en CDN). Les identifiants (URL + clé publique "publishable") sont en dur dans `escale.html` — c'est volontaire et sans risque : Row Level Security est activée sur toutes les tables, en lecture/écriture publique ouverte (pas de comptes utilisateurs pour l'instant).
 - **`migration.sql`** — schéma complet des tables (`etablissements`, `services`, `temoignages`, `suggestions`, `avisApp`, `reponses`) + policies RLS. Référence pour toute modification de schéma.
 - **`seed_handoff_sante.sql`** — jeu de données initial (établissements + services de référence).
-- Une fonction serverless **Vercel** (`api/claude.js`, dans le dépôt GitHub sous `repo/api/`) sert de passerelle vers l'API Anthropic (résumé IA des témoignages) : la clé `ANTHROPIC_API_KEY` reste côté serveur (variable d'environnement Vercel), jamais exposée au navigateur.
+- Une fonction serverless **Vercel** (`api/claude.js`, à la racine du projet) sert de passerelle vers l'API Anthropic (résumé IA des témoignages) : la clé `ANTHROPIC_API_KEY` reste côté serveur (variable d'environnement Vercel), jamais exposée au navigateur.
 
 ### Recherche
 
@@ -61,7 +61,6 @@ node -e "new Function(require('fs').readFileSync('<script_extrait.js>','utf8'));
 | `build_index.py` | Génère `index.html` depuis `escale.html` |
 | `migration.sql` | Schéma Supabase (tables + RLS) |
 | `seed_handoff_sante.sql` | Données initiales |
-| `repo/` | Clone local du dépôt GitHub `vocatherine/handoff-sante` (contient `index.html`, `api/claude.js`, manifest PWA, icônes) |
-| `repo/api/claude.js` | Fonction serverless Vercel — passerelle vers l'API Anthropic |
+| `api/claude.js` | Fonction serverless Vercel — passerelle vers l'API Anthropic |
 | `finess/` | Fichiers et script d'import des établissements FINESS |
 | `migration_export/` | Exports de données par table (étab./services/témoignages) |
