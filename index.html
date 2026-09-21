@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Handoff Santé — avis entre soignants sur les services de soin, pour savoir où on met les pieds avant une mission.">
 <title>Handoff Santé</title>
+<!-- Vérification Google AdSense (21/09/2026) -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7148612339271747"
+     crossorigin="anonymous"></script>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0E6B5C">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
@@ -158,6 +161,28 @@
     border-radius:14px; font-size:13.5px; line-height:1.5;
   }
   .search-hint b{ color:var(--ink-soft); }
+
+  /* ---------- Activité récente (accueil) ---------- */
+  .activite-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:22px;
+  }
+  .ar-live{ display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:12px; }
+  .ar-dot{
+    width:9px; height:9px; border-radius:50%; background:var(--good); flex:none;
+    box-shadow:0 0 0 0 rgba(31,122,77,.5); animation:ar-pulse 2s infinite;
+  }
+  @keyframes ar-pulse{
+    0%{ box-shadow:0 0 0 0 rgba(31,122,77,.45); }
+    70%{ box-shadow:0 0 0 7px rgba(31,122,77,0); }
+    100%{ box-shadow:0 0 0 0 rgba(31,122,77,0); }
+  }
+  .ar-count{ font-size:13.5px; color:var(--ink-soft); margin-bottom:10px; }
+  .ar-count b{ color:var(--ink); font-family:"IBM Plex Mono",monospace; }
+  .ar-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .ar-list li{ border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:2px; }
+  .ar-list li:first-child{ border-top:none; padding-top:0; }
+  .ar-meta{ font-size:11.5px; color:var(--muted); }
+  .ar-where{ font-size:13.5px; color:var(--ink); font-weight:500; }
 
   /* ---------- Stat strip ---------- */
   .stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px; background:var(--border);
@@ -366,6 +391,26 @@
   .roadstep .idx{ font-family:"IBM Plex Mono",monospace; color:var(--accent-strong); font-weight:600; flex:none; }
   .roadstep b{ display:block; font-size:13.5px; margin-bottom:3px; }
   .roadstep span{ font-size:13px; color:var(--ink-soft); }
+
+  /* ---------- Trafic (modération) ---------- */
+  .traffic-chart{ border:1px solid var(--border); border-radius:14px; padding:16px 18px 10px; background:var(--surface); margin-bottom:22px; }
+  .tc-summary{ font-size:13.5px; color:var(--ink-soft); margin-bottom:14px; }
+  .tc-bars{ display:flex; align-items:flex-end; gap:4px; height:120px; }
+  .tc-bar{ flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; cursor:default; outline:none; }
+  .tc-bar-fill{ width:100%; max-width:22px; background:var(--accent); border-radius:3px 3px 0 0; min-height:3px; transition:background .15s; }
+  .tc-bar:hover .tc-bar-fill, .tc-bar:focus-visible .tc-bar-fill{ background:var(--accent-strong); }
+  .tc-axis-label{ font-size:10px; color:var(--muted); margin-top:6px; font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
+  .tc-table-toggle{ margin-top:8px; }
+  .tc-table-toggle summary{ font-size:12.5px; color:var(--accent-strong); font-weight:600; cursor:pointer; }
+  .mod-accordion{ margin-bottom:10px; }
+  .mod-accordion summary{ font-size:15px; }
+  .mod-accordion summary .badge{ margin-left:4px; }
+  .mod-accordion .faq-a{ max-width:none; }
+  .badge-new{
+    display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700;
+    background:var(--critical-bg); color:var(--critical); padding:3px 8px; border-radius:999px;
+    animation:ar-pulse 2s infinite;
+  }
 
   .support-card{ display:flex; gap:14px; align-items:flex-start; background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:14px; padding:16px 18px; margin-bottom:24px; }
   .support-card .support-icon{ font-size:22px; flex:none; line-height:1; }
@@ -687,7 +732,11 @@
   }
 
   // ---------------------------------------------------------------- state
-  let db = null, sample = null;
+  let db = null, sample = null, sb = null;
+  // Activité en direct (présence Supabase Realtime + compteur de visites journalier) — voir setupPresence()
+  // et trackVisit() plus bas, utilisés à la fois sur l'accueil ("activité récente") et en modération
+  // ("trafic du site"). Purement informatif, jamais de donnée personnelle : aucun id, aucune IP stockée.
+  let presenceCount = null;
   // Petit filet de sécurité pour les écritures utilisateur : un pépin réseau ponctuel (le cas le
   // plus fréquent en pratique) ne doit pas faire échouer l'envoi d'un témoignage, d'un service ou
   // d'une suggestion — on retente automatiquement avant de déranger la personne avec une erreur.
@@ -822,9 +871,11 @@
     if (ttLink) ttLink.onclick = socialComingSoon("TikTok");
 
     try {
-      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       db = createSupabaseDb(sb);
     } catch(e){ db = null; }
+    setupPresence();
+    trackVisit();
     // Le résumé IA (aiSummary) reposait sur window.claude.use("sample"), une capacité propre aux
     // artefacts Claude, indisponible en hébergement indépendant. On la remplace par un appel à notre
     // propre fonction serveur /api/claude (voir api/claude.js dans le dépôt), qui relaie le prompt à
@@ -856,6 +907,53 @@
     } else {
       render();
     }
+  }
+
+  // ---------------------------------------------------------------- présence en direct & trafic
+  // "Combien de personnes ont Handoff Santé ouvert en ce moment" via la fonction Presence de Supabase
+  // Realtime : chaque onglet ouvert s'annonce dans un salon partagé, sans aucune donnée personnelle
+  // (juste un identifiant aléatoire jetable, jamais stocké nulle part). Un vrai chiffre, pas inventé —
+  // mais qui ne compte que les onglets connectés au moment présent, pas un historique.
+  function setupPresence(){
+    if (!sb || !sb.channel) return;
+    try {
+      const myKey = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+      const channel = sb.channel("hs-visiteurs-en-ligne", { config: { presence: { key: myKey } } });
+      channel
+        .on("presence", { event: "sync" }, () => {
+          try { presenceCount = Object.keys(channel.presenceState()).length; } catch(e){ presenceCount = null; }
+          paintPresenceEls();
+        })
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") { try { await channel.track({ t: Date.now() }); } catch(e){} }
+        });
+    } catch(e){ presenceCount = null; }
+  }
+  // Met à jour tous les compteurs "en direct" actuellement affichés à l'écran (accueil et/ou modération).
+  function paintPresenceEls(){
+    document.querySelectorAll(".live-visitor-count").forEach(el => {
+      el.textContent = presenceCount == null ? "—" : presenceCount;
+    });
+  }
+
+  // Compteur de visites journalier (table Supabase "visites", une ligne par jour). Une seule écriture par
+  // onglet et par jour (sessionStorage) pour ne pas gonfler artificiellement le chiffre à chaque navigation
+  // interne — c'est un indicateur de fréquentation, pas une mesure d'audience publicitaire précise.
+  async function trackVisit(){
+    if (!db) return;
+    try {
+      const jour = new Date().toISOString().slice(0,10);
+      const flagKey = "hs_visit_logged_" + jour;
+      if (sessionStorage.getItem(flagKey)) return;
+      sessionStorage.setItem(flagKey, "1");
+      const ref = db.collection("visites").doc(jour);
+      const snap = await ref.get();
+      if (snap.exists) {
+        await ref.update({ total: (snap.data().total || 0) + 1, updatedAt: new Date().toISOString() });
+      } else {
+        await ref.set({ jour, total: 1, updatedAt: new Date().toISOString() });
+      }
+    } catch(e) { /* non-critique : on ne dérange jamais la visite pour ça */ }
   }
 
   function nav(hash){ location.hash = hash; }
@@ -946,6 +1044,8 @@
            marche", stats, soutien — vient après, une fois qu'on a déjà vu ce qu'on cherchait). -->
       <div id="home-list"></div>
 
+      <div id="activite-recente"></div>
+
       <div class="howit">
         <div class="step"><span class="num">1</span><div><b>Tu explores</b><span>Cherche le service où tu pars en mission, avant de dire oui.</span></div></div>
         <div class="step"><span class="num">2</span><div><b>Tu donnes ton avis</b><span>2 minutes, sans ton nom, juste ton expérience — même en 3 phrases.</span></div></div>
@@ -994,6 +1094,7 @@
     document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; renderHomeList(); };
 
     paintHomeList(list, unreferenced);
+    paintActiviteRecente();
 
     function renderHomeList(){
       let l = services.slice();
@@ -1103,11 +1204,70 @@
     if (!holder) return;
     unreferenced = unreferenced || [];
 
-    // On ne montre plus jamais la grille de vignettes en dessous de la recherche — qu'il y ait une
-    // requête en cours ou non — pour laisser le menu déroulant (établissement → ses services, en
-    // liste) faire tout le travail. Cf. demandes de Catherine du 20/09/2026 ("c'est franchement
-    // imbuvable") et du lendemain ("ça fait vraiment chargé").
+    // La grille de vignettes n'est plus affichée sous une RECHERCHE TEXTE — le menu déroulant
+    // (établissement → ses services) fait ce travail-là. Cf. demandes de Catherine du 20/09/2026
+    // ("c'est franchement imbuvable") et du lendemain ("ça fait vraiment chargé").
+    // MAIS les filtres région/type/"signalements uniquement" (chips sous la recherche) n'ont, eux,
+    // aucun équivalent dans ce menu déroulant : sans texte tapé, c'est leur SEULE façon d'afficher un
+    // résultat. Corrigé le 21/09/2026 : quand un de ces filtres est actif sans texte de recherche, on
+    // affiche bien la liste réelle des services correspondants (notamment pour retrouver les
+    // signalements graves depuis l'accueil, sans avoir à connaître le nom d'un établissement).
+    const filtresSeuls = !filterState.q && (filterState.onlyFlagged || filterState.region || filterState.type);
+    if (filtresSeuls) {
+      if (!list.length) {
+        holder.innerHTML = `<div class="empty"><h3>Aucun résultat</h3><p>Essaie d'élargir tes filtres.</p></div>`;
+        return;
+      }
+      holder.innerHTML = `<div class="grid">${list.map(cardHtml).join("")}</div>`;
+      holder.querySelectorAll(".card[data-id]").forEach(el => { el.onclick = () => nav("#/service/"+el.dataset.id); });
+      return;
+    }
+
     holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
+  }
+
+  // ---------------------------------------------------------------- ACTIVITÉ RÉCENTE (accueil)
+  // Remplace l'ancienne grille de vignettes de services sous la recherche (retirée le 20-21/09/2026).
+  // Toujours 100% anonyme : aucun nom, aucun email, aucun identifiant de soignant — juste métier/statut,
+  // service, établissement, ville et notes, exactement ce qui est déjà public sur la fiche du service.
+  async function paintActiviteRecente(){
+    const holder = document.getElementById("activite-recente");
+    if (!holder) return;
+    holder.innerHTML = `
+      <div class="activite-card">
+        <div class="ar-live"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur Handoff Santé en ce moment</div>
+        <div class="ar-feed" id="ar-feed"><p class="hint">Chargement de l'activité récente…</p></div>
+      </div>`;
+    if (!db) return;
+    try {
+      const cutoff = new Date(Date.now() - 7*24*3600*1000).toISOString();
+      const [recentSnap, weekSnap] = await Promise.all([
+        db.collection("temoignages").orderBy("createdAt","desc").limit(30).get(),
+        db.collection("temoignages").where("createdAt",">=",cutoff).limit(1000).get()
+      ]);
+      const feedItems = recentSnap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(t => (t.signalements||0) < 3 && isPublished(t))
+        .slice(0, 5);
+      const weekCount = weekSnap.docs.length;
+      const feedEl = document.getElementById("ar-feed");
+      if (!feedEl) return;
+      feedEl.innerHTML = `
+        <div class="ar-count">💬 <b>${weekCount}</b> témoignage${weekCount>1?"s":""} déposé${weekCount>1?"s":""} ces 7 derniers jours</div>
+        ${feedItems.length === 0 ? "" : `
+          <ul class="ar-list">
+            ${feedItems.map(t => `
+              <li>
+                <span class="ar-meta">${esc(t.profession||"Soignant·e")} · ${esc(t.statut||"")} · ${esc(recencyLabelPublish(t.createdAt)||"")}</span>
+                <span class="ar-where">${esc(t.serviceNom||"")} — ${esc(t.etablissementNom||"")}${t.ville ? `, ${esc(t.ville)}` : ""}</span>
+                ${t.maltraitance||t.harcelement||t.racisme ? `<span class="badge warn" style="margin-top:4px">🚩 signalement</span>` : ""}
+              </li>`).join("")}
+          </ul>`}
+      `;
+    } catch(e) {
+      const feedEl = document.getElementById("ar-feed");
+      if (feedEl) feedEl.innerHTML = `<p class="hint">Activité récente indisponible pour le moment.</p>`;
+    }
   }
 
   function unrefEtabCardHtml(e){
@@ -2587,6 +2747,93 @@
     };
   }
 
+  // Graphique du nombre de visites/jour (table Supabase "visites", alimentée par trackVisit()) — fenêtre
+  // fixe de 14 jours, jours sans donnée affichés à zéro plutôt qu'absents, pour un axe toujours complet
+  // même juste après la mise en place de ce compteur.
+  function paintTrafficChart(rows){
+    const holder = document.getElementById("mod-traffic-chart");
+    if (!holder) return;
+    const byDay = {};
+    (rows||[]).forEach(r => { if (r.jour) byDay[r.jour] = r.total || 0; });
+    const days = [];
+    for (let i = 13; i >= 0; i--) days.push(new Date(Date.now() - i*24*3600*1000).toISOString().slice(0,10));
+    const values = days.map(j => byDay[j] || 0);
+    const max = Math.max(1, ...values);
+    const totalPeriode = values.reduce((a,b)=>a+b,0);
+    const fmtDay = (iso) => new Date(iso+"T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
+    holder.innerHTML = `
+      <div class="traffic-chart">
+        <div class="tc-summary">${totalPeriode} visite${totalPeriode>1?"s":""} comptabilisée${totalPeriode>1?"s":""} sur les 14 derniers jours</div>
+        <div class="tc-bars" role="img" aria-label="Nombre de visites par jour sur les 14 derniers jours, de ${fmtDay(days[0])} à ${fmtDay(days[days.length-1])}">
+          ${days.map((j,i) => {
+            const v = values[i];
+            const h = Math.max(3, Math.round((v/max)*100));
+            const showLabel = i===0 || i===days.length-1 || i%3===0;
+            return `<div class="tc-bar" tabindex="0" title="${fmtDay(j)} : ${plur(v,'visite')}">
+              <div class="tc-bar-fill" style="height:${h}%"></div>
+              <div class="tc-axis-label">${showLabel ? fmtDay(j) : ""}</div>
+            </div>`;
+          }).join("")}
+        </div>
+        <details class="tc-table-toggle">
+          <summary>Voir le détail en tableau</summary>
+          <table class="effectifs-table" style="margin-top:8px;max-width:320px;">
+            <thead><tr><th>Jour</th><th>Visites</th></tr></thead>
+            <tbody>${days.map((j,i)=>`<tr><td>${fmtDay(j)}</td><td class="mono">${values[i]}</td></tr>`).join("")}</tbody>
+          </table>
+        </details>
+      </div>
+    `;
+  }
+
+  // Notifications "nouveau" par section de la page modération (21/09/2026, à la demande de Catherine) :
+  // une date de dernière visite par section est gardée sur cet appareil (localStorage), pour afficher un
+  // badge rouge tant qu'un élément plus récent que cette date existe — sans avoir besoin de déplier la
+  // section pour le savoir. Premher passage sur une section : aucune notification rétroactive (on pose
+  // juste la date de référence à "maintenant"), seuls les éléments arrivés APRÈS compteront comme nouveaux.
+  function newCountForSection(items, sectionKey){
+    const key = "hs_mod_seen_" + sectionKey;
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem(key); } catch(e){}
+    if (!lastSeen) {
+      try { localStorage.setItem(key, new Date().toISOString()); } catch(e){}
+      return 0;
+    }
+    return items.filter(it => it.createdAt && it.createdAt > lastSeen).length;
+  }
+  function newBadgeHtml(n){
+    return n > 0 ? `<span class="badge-new">🔴 ${n} nouveau${n>1?"x":""}</span>` : "";
+  }
+  function wireModAccordionNotifications(){
+    document.querySelectorAll("details.mod-accordion[data-section]").forEach(det => {
+      det.addEventListener("toggle", () => {
+        if (det.open) {
+          try { localStorage.setItem("hs_mod_seen_"+det.dataset.section, new Date().toISOString()); } catch(e){}
+          const badge = det.querySelector(".badge-new");
+          if (badge) badge.remove();
+        }
+      });
+    });
+  }
+
+  // Aperçu texte d'un témoignage en modération : avant, seul le champ "commentaire" libre était affiché,
+  // donc un témoignage qui n'avait rempli que "points positifs"/"points à améliorer" (deux champs séparés
+  // du formulaire) apparaissait vide, illisible — corrigé le 21/09/2026 pour combiner les trois.
+  function temoignagePreviewHtml(t, maxLen, colorVar){
+    maxLen = maxLen || 400;
+    colorVar = colorVar || "var(--ink-soft)";
+    const parts = [];
+    if (t.commentaire) parts.push(t.commentaire);
+    if (t.pointsPositifs) parts.push("👍 " + t.pointsPositifs);
+    if (t.pointsAmeliorer) parts.push("🔧 " + t.pointsAmeliorer);
+    if (!parts.length) {
+      return `<p style="font-size:13px; margin:8px 0 0; color:var(--muted); font-style:italic;">(pas de texte écrit — uniquement des notes chiffrées)</p>`;
+    }
+    let text = parts.join("  ·  ");
+    if (text.length > maxLen) text = text.slice(0, maxLen) + "…";
+    return `<p style="font-size:13px; margin:8px 0 0; color:${colorVar};">${esc(text)}</p>`;
+  }
+
   // ---------------------------------------------------------------- MODÉRATION (admin uniquement, ?admin=1)
   async function renderModeration(app){
     if (!isAdminMode()) {
@@ -2625,36 +2872,78 @@
       avisApp = avsnap.docs.map(d => ({ id:d.id, ...d.data() }));
     } catch(e) {}
     const avisAppMoyenne = avisApp.length ? round1(avisApp.reduce((a,x)=>a+(x.note||0),0)/avisApp.length) : null;
+    // Trafic du site (compteur de visites journalier, table "visites") — purement pour Catherine, aucune
+    // donnée personnelle : un jour, un total de visites, rien d'autre.
+    let visitesRows = [];
+    try {
+      const vsnap = await db.collection("visites").orderBy("jour","desc").limit(30).get();
+      visitesRows = vsnap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => (a.jour||"").localeCompare(b.jour||""));
+    } catch(e) {}
     app.innerHTML = `
       <div class="pagehead about">
         <div class="eyebrow">Mode admin</div>
         <h1>🛡 Modération</h1>
-        <p class="lede">Témoignages signalés par la communauté (3 signalements = masqué automatiquement) et signalements graves — à traiter ici en attendant un vrai système de rôles. La décision finale reste toujours humaine — l'IA aide juste à trier plus vite. Tu peux aussi noter une gravité de 0 à 5 sur chaque signalement (inspiré de la plateforme étudiante GELULES) pour prioriser ta lecture au fil du temps.</p>
-        <h2>Témoignages à traiter</h2>
-        ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
-        <h2>Demandes de droit de réponse en attente</h2>
-        <p class="hint" style="margin-top:-6px">Vérifie que le·la demandeur·se représente bien l'établissement (email professionnel, recherche rapide) et que le texte ne cherche pas à identifier l'auteur·e anonyme, avant de publier.</p>
-        ${reponsesPending.length === 0 ? `<p class="hint">Aucune demande en attente.</p>` : `<div class="roadmap" id="mod-reponses-list"></div>`}
-        <h2>💡 Suggestions reçues</h2>
-        ${suggestionsNouvelles.length === 0 ? `<p class="hint">Aucune nouvelle suggestion.</p>` : `<div class="roadmap" id="mod-suggestions-list"></div>`}
-        <h2>💛 Avis des soignants sur l'appli elle-même</h2>
-        <p class="hint" style="margin-top:-6px">Recueilli juste après un dépôt de témoignage, une fois par appareil — pour suivre dans le temps si l'appli plaît, indépendamment des avis sur les services.</p>
-        ${avisApp.length === 0 ? `<p class="hint">Aucun avis pour l'instant.</p>` : `
-          <div class="stats" style="margin-bottom:14px;">
-            <div class="stat"><div class="n">${avisAppMoyenne}/5</div><div class="l">Note moyenne</div></div>
-            <div class="stat"><div class="n">${avisApp.length}</div><div class="l">Avis reçus</div></div>
+        <p class="lede">Témoignages signalés par la communauté (3 signalements = masqué automatiquement) et signalements graves — à traiter ici en attendant un vrai système de rôles. La décision finale reste toujours humaine — l'IA aide juste à trier plus vite. Tu peux aussi noter une gravité de 0 à 5 sur chaque signalement (inspiré de la plateforme étudiante GELULES) pour prioriser ta lecture au fil du temps. Clique sur chaque titre pour déplier ou replier la section.</p>
+
+        <details class="faq-item mod-accordion">
+          <summary>📈 Trafic du site <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <div class="ar-live" style="margin-bottom:14px"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur le site en ce moment</div>
+            <div id="mod-traffic-chart"></div>
           </div>
-          <div class="roadmap">${avisApp.filter(a=>a.commentaire).slice(0,20).map(a => `
-            <div class="roadstep">
-              <span class="idx">${a.note}/5</span>
-              <div><span>${esc(recencyLabelPublish(a.createdAt)||"")}</span><p style="font-size:13px; margin:6px 0 0; color:var(--ink)">${esc(a.commentaire)}</p></div>
-            </div>
-          `).join("")}</div>`}
-        <h2>🕓 Derniers témoignages reçus</h2>
-        <p class="hint" style="margin-top:-6px">Vue lecture seule, pour garder un œil sur ce qui arrive — traités automatiquement sans relecture préalable, seulement retenus ${PUBLICATION_DELAI_H}h avant apparition publique (délai d'anonymat, pas une validation éditoriale — voir plus haut ci-dessus pour les signalés).</p>
-        ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
+        </details>
+
+        <details class="faq-item mod-accordion" data-section="traiter" open>
+          <summary>🚩 Témoignages à traiter ${items.length ? `<span class="badge warn">${items.length}</span>` : ""} ${newBadgeHtml(newCountForSection(items,"traiter"))} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion" data-section="reponses">
+          <summary>✉️ Demandes de droit de réponse ${reponsesPending.length ? `<span class="badge warn">${reponsesPending.length}</span>` : ""} ${newBadgeHtml(newCountForSection(reponsesPending,"reponses"))} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Vérifie que le·la demandeur·se représente bien l'établissement (email professionnel, recherche rapide) et que le texte ne cherche pas à identifier l'auteur·e anonyme, avant de publier.</p>
+            ${reponsesPending.length === 0 ? `<p class="hint">Aucune demande en attente.</p>` : `<div class="roadmap" id="mod-reponses-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion" data-section="suggestions">
+          <summary>💡 Suggestions reçues ${suggestionsNouvelles.length ? `<span class="badge warn">${suggestionsNouvelles.length}</span>` : ""} ${newBadgeHtml(newCountForSection(suggestionsNouvelles,"suggestions"))} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            ${suggestionsNouvelles.length === 0 ? `<p class="hint">Aucune nouvelle suggestion.</p>` : `<div class="roadmap" id="mod-suggestions-list"></div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion" data-section="avis">
+          <summary>💛 Avis des soignants sur l'appli ${avisApp.length ? `<span class="badge muted">${avisApp.length}</span>` : ""} ${newBadgeHtml(newCountForSection(avisApp,"avis"))} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Recueilli juste après un dépôt de témoignage, une fois par appareil — pour suivre dans le temps si l'appli plaît, indépendamment des avis sur les services.</p>
+            ${avisApp.length === 0 ? `<p class="hint">Aucun avis pour l'instant.</p>` : `
+              <div class="stats" style="margin-bottom:14px;">
+                <div class="stat"><div class="n">${avisAppMoyenne}/5</div><div class="l">Note moyenne</div></div>
+                <div class="stat"><div class="n">${avisApp.length}</div><div class="l">Avis reçus</div></div>
+              </div>
+              <div class="roadmap">${avisApp.filter(a=>a.commentaire).slice(0,20).map(a => `
+                <div class="roadstep">
+                  <span class="idx">${a.note}/5</span>
+                  <div><span>${esc(recencyLabelPublish(a.createdAt)||"")}</span><p style="font-size:13px; margin:6px 0 0; color:var(--ink)">${esc(a.commentaire)}</p></div>
+                </div>
+              `).join("")}</div>`}
+          </div>
+        </details>
+
+        <details class="faq-item mod-accordion" data-section="recent">
+          <summary>🕓 Derniers témoignages reçus ${recent.length ? `<span class="badge muted">${recent.length}</span>` : ""} ${newBadgeHtml(newCountForSection(recent,"recent"))} <span class="chev">＋</span></summary>
+          <div class="faq-a" style="max-width:none">
+            <p class="hint" style="margin-top:0">Vue lecture seule, pour garder un œil sur ce qui arrive — traités automatiquement sans relecture préalable, seulement retenus ${PUBLICATION_DELAI_H}h avant apparition publique (délai d'anonymat, pas une validation éditoriale — voir plus haut ci-dessus pour les signalés).</p>
+            ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
+          </div>
+        </details>
       </div>
     `;
+    wireModAccordionNotifications();
+    paintTrafficChart(visitesRows);
     if (reponsesPending.length) {
       const rlist = document.getElementById("mod-reponses-list");
       rlist.innerHTML = reponsesPending.map(r => `
@@ -2709,7 +2998,7 @@
           <div style="flex:1">
             <b>${esc(t.serviceNom)} — ${esc(t.etablissementNom)} ${esc(t.ville||"")}</b>${t.moderationVerified ? ` <span class="verified-badge">✓ Vérifié</span>` : ""}${!isPublished(t) ? ` <span class="verified-badge" style="background:var(--warn-bg);color:var(--warn-strong)">🕓 ${esc(publicationRemainingLabel(t))}</span>` : ""}
             <span>${esc(t.profession||"?")} · ${esc(t.statut||"?")} · ${esc(recencyLabelPublish(t.createdAt)||"")}</span>
-            ${t.commentaire ? `<p style="font-size:13px; margin:8px 0 0; color:var(--ink-soft)">${esc(t.commentaire.length>160 ? t.commentaire.slice(0,160)+"…" : t.commentaire)}</p>` : ""}
+            ${temoignagePreviewHtml(t, 200)}
             <div style="display:flex; gap:10px; margin-top:8px;">
               <a class="btn-text" href="#/service/${esc(t.serviceId)}">Voir le service</a>
             </div>
@@ -2725,7 +3014,7 @@
         <div style="flex:1">
           <b>${esc(t.serviceNom)} — ${esc(t.etablissementNom)} ${esc(t.ville||"")}</b>${t.moderationVerified ? ` <span class="verified-badge">✓ Vérifié</span>` : ""}${!isPublished(t) ? ` <span class="verified-badge" style="background:var(--warn-bg);color:var(--warn-strong)">🕓 ${esc(publicationRemainingLabel(t))}</span>` : ""}${t.graviteModeration!=null ? ` <span class="verified-badge" style="background:var(--critical-bg);color:var(--critical)">Gravité ${t.graviteModeration}/5</span>` : ""}
           <span>${esc(t.profession||"?")} · ${esc(t.statut||"?")} · ${t.signalements||0} signalement(s)${t.maltraitance?" · maltraitance":""}${t.harcelement?" · harcèlement":""}${t.racisme?" · racisme":""}</span>
-          <p style="font-size:13px; margin:8px 0 0; color:var(--ink)">${esc(t.commentaire||"(pas de commentaire)")}</p>
+          ${temoignagePreviewHtml(t, 600, "var(--ink)")}
           ${t.maltraitanceDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Maltraitance : ${esc(t.maltraitanceDetail)}</p>` : ""}
           ${t.harcelementDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Harcèlement : ${esc(t.harcelementDetail)}</p>` : ""}
           ${t.racismeDetail ? `<p style="font-size:12.5px;color:var(--critical);margin:4px 0 0">Racisme : ${esc(t.racismeDetail)}</p>` : ""}
@@ -2772,12 +3061,33 @@
       for (const t of items) { await analyzeOne(t); }
       bulkBtn.textContent = "✦ Analyser tout avec l'IA"; bulkBtn.disabled = false;
     };
-    list.querySelectorAll(".mod-gravite").forEach(sel => sel.onchange = async () => {
-      const val = sel.value === "" ? null : Number(sel.value);
-      await db.collection("temoignages").doc(sel.dataset.id).update({
-        graviteModeration: val, graviteModerationAt: new Date().toISOString()
-      });
-      renderModeration(app);
+    list.querySelectorAll(".mod-gravite").forEach(sel => {
+      const field = sel.closest(".field");
+      let statusEl = field.querySelector(".mod-gravite-status");
+      if (!statusEl) {
+        statusEl = document.createElement("div");
+        statusEl.className = "mod-gravite-status hint";
+        statusEl.style.marginTop = "4px";
+        field.appendChild(statusEl);
+      }
+      sel.onchange = async () => {
+        const val = sel.value === "" ? null : Number(sel.value);
+        sel.disabled = true;
+        statusEl.style.color = "var(--ink-soft)";
+        statusEl.textContent = "Enregistrement…";
+        try {
+          await db.collection("temoignages").doc(sel.dataset.id).update({
+            graviteModeration: val, graviteModerationAt: new Date().toISOString()
+          });
+          statusEl.style.color = "var(--accent-strong)";
+          statusEl.textContent = "✓ Enregistré";
+          setTimeout(() => renderModeration(app), 900);
+        } catch(e) {
+          sel.disabled = false;
+          statusEl.style.color = "var(--critical)";
+          statusEl.textContent = "⚠ Échec de l'enregistrement (colonne manquante en base ou connexion) — réessaie, et préviens Catherine si ça persiste.";
+        }
+      };
     });
     list.querySelectorAll(".mod-verify").forEach(btn => btn.onclick = async () => {
       await db.collection("temoignages").doc(btn.dataset.id).update({
