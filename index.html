@@ -159,6 +159,28 @@
   }
   .search-hint b{ color:var(--ink-soft); }
 
+  /* ---------- Activité récente (accueil) ---------- */
+  .activite-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:22px;
+  }
+  .ar-live{ display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:12px; }
+  .ar-dot{
+    width:9px; height:9px; border-radius:50%; background:var(--good); flex:none;
+    box-shadow:0 0 0 0 rgba(31,122,77,.5); animation:ar-pulse 2s infinite;
+  }
+  @keyframes ar-pulse{
+    0%{ box-shadow:0 0 0 0 rgba(31,122,77,.45); }
+    70%{ box-shadow:0 0 0 7px rgba(31,122,77,0); }
+    100%{ box-shadow:0 0 0 0 rgba(31,122,77,0); }
+  }
+  .ar-count{ font-size:13.5px; color:var(--ink-soft); margin-bottom:10px; }
+  .ar-count b{ color:var(--ink); font-family:"IBM Plex Mono",monospace; }
+  .ar-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .ar-list li{ border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:2px; }
+  .ar-list li:first-child{ border-top:none; padding-top:0; }
+  .ar-meta{ font-size:11.5px; color:var(--muted); }
+  .ar-where{ font-size:13.5px; color:var(--ink); font-weight:500; }
+
   /* ---------- Stat strip ---------- */
   .stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px; background:var(--border);
     border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:22px; }
@@ -366,6 +388,17 @@
   .roadstep .idx{ font-family:"IBM Plex Mono",monospace; color:var(--accent-strong); font-weight:600; flex:none; }
   .roadstep b{ display:block; font-size:13.5px; margin-bottom:3px; }
   .roadstep span{ font-size:13px; color:var(--ink-soft); }
+
+  /* ---------- Trafic (modération) ---------- */
+  .traffic-chart{ border:1px solid var(--border); border-radius:14px; padding:16px 18px 10px; background:var(--surface); margin-bottom:22px; }
+  .tc-summary{ font-size:13.5px; color:var(--ink-soft); margin-bottom:14px; }
+  .tc-bars{ display:flex; align-items:flex-end; gap:4px; height:120px; }
+  .tc-bar{ flex:1 1 0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; cursor:default; outline:none; }
+  .tc-bar-fill{ width:100%; max-width:22px; background:var(--accent); border-radius:3px 3px 0 0; min-height:3px; transition:background .15s; }
+  .tc-bar:hover .tc-bar-fill, .tc-bar:focus-visible .tc-bar-fill{ background:var(--accent-strong); }
+  .tc-axis-label{ font-size:10px; color:var(--muted); margin-top:6px; font-family:"IBM Plex Mono",monospace; white-space:nowrap; }
+  .tc-table-toggle{ margin-top:8px; }
+  .tc-table-toggle summary{ font-size:12.5px; color:var(--accent-strong); font-weight:600; cursor:pointer; }
 
   .support-card{ display:flex; gap:14px; align-items:flex-start; background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:14px; padding:16px 18px; margin-bottom:24px; }
   .support-card .support-icon{ font-size:22px; flex:none; line-height:1; }
@@ -687,7 +720,11 @@
   }
 
   // ---------------------------------------------------------------- state
-  let db = null, sample = null;
+  let db = null, sample = null, sb = null;
+  // Activité en direct (présence Supabase Realtime + compteur de visites journalier) — voir setupPresence()
+  // et trackVisit() plus bas, utilisés à la fois sur l'accueil ("activité récente") et en modération
+  // ("trafic du site"). Purement informatif, jamais de donnée personnelle : aucun id, aucune IP stockée.
+  let presenceCount = null;
   // Petit filet de sécurité pour les écritures utilisateur : un pépin réseau ponctuel (le cas le
   // plus fréquent en pratique) ne doit pas faire échouer l'envoi d'un témoignage, d'un service ou
   // d'une suggestion — on retente automatiquement avant de déranger la personne avec une erreur.
@@ -822,9 +859,11 @@
     if (ttLink) ttLink.onclick = socialComingSoon("TikTok");
 
     try {
-      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       db = createSupabaseDb(sb);
     } catch(e){ db = null; }
+    setupPresence();
+    trackVisit();
     // Le résumé IA (aiSummary) reposait sur window.claude.use("sample"), une capacité propre aux
     // artefacts Claude, indisponible en hébergement indépendant. On la remplace par un appel à notre
     // propre fonction serveur /api/claude (voir api/claude.js dans le dépôt), qui relaie le prompt à
@@ -856,6 +895,53 @@
     } else {
       render();
     }
+  }
+
+  // ---------------------------------------------------------------- présence en direct & trafic
+  // "Combien de personnes ont Handoff Santé ouvert en ce moment" via la fonction Presence de Supabase
+  // Realtime : chaque onglet ouvert s'annonce dans un salon partagé, sans aucune donnée personnelle
+  // (juste un identifiant aléatoire jetable, jamais stocké nulle part). Un vrai chiffre, pas inventé —
+  // mais qui ne compte que les onglets connectés au moment présent, pas un historique.
+  function setupPresence(){
+    if (!sb || !sb.channel) return;
+    try {
+      const myKey = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+      const channel = sb.channel("hs-visiteurs-en-ligne", { config: { presence: { key: myKey } } });
+      channel
+        .on("presence", { event: "sync" }, () => {
+          try { presenceCount = Object.keys(channel.presenceState()).length; } catch(e){ presenceCount = null; }
+          paintPresenceEls();
+        })
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") { try { await channel.track({ t: Date.now() }); } catch(e){} }
+        });
+    } catch(e){ presenceCount = null; }
+  }
+  // Met à jour tous les compteurs "en direct" actuellement affichés à l'écran (accueil et/ou modération).
+  function paintPresenceEls(){
+    document.querySelectorAll(".live-visitor-count").forEach(el => {
+      el.textContent = presenceCount == null ? "—" : presenceCount;
+    });
+  }
+
+  // Compteur de visites journalier (table Supabase "visites", une ligne par jour). Une seule écriture par
+  // onglet et par jour (sessionStorage) pour ne pas gonfler artificiellement le chiffre à chaque navigation
+  // interne — c'est un indicateur de fréquentation, pas une mesure d'audience publicitaire précise.
+  async function trackVisit(){
+    if (!db) return;
+    try {
+      const jour = new Date().toISOString().slice(0,10);
+      const flagKey = "hs_visit_logged_" + jour;
+      if (sessionStorage.getItem(flagKey)) return;
+      sessionStorage.setItem(flagKey, "1");
+      const ref = db.collection("visites").doc(jour);
+      const snap = await ref.get();
+      if (snap.exists) {
+        await ref.update({ total: (snap.data().total || 0) + 1, updatedAt: new Date().toISOString() });
+      } else {
+        await ref.set({ jour, total: 1, updatedAt: new Date().toISOString() });
+      }
+    } catch(e) { /* non-critique : on ne dérange jamais la visite pour ça */ }
   }
 
   function nav(hash){ location.hash = hash; }
@@ -946,6 +1032,8 @@
            marche", stats, soutien — vient après, une fois qu'on a déjà vu ce qu'on cherchait). -->
       <div id="home-list"></div>
 
+      <div id="activite-recente"></div>
+
       <div class="howit">
         <div class="step"><span class="num">1</span><div><b>Tu explores</b><span>Cherche le service où tu pars en mission, avant de dire oui.</span></div></div>
         <div class="step"><span class="num">2</span><div><b>Tu donnes ton avis</b><span>2 minutes, sans ton nom, juste ton expérience — même en 3 phrases.</span></div></div>
@@ -994,6 +1082,7 @@
     document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; renderHomeList(); };
 
     paintHomeList(list, unreferenced);
+    paintActiviteRecente();
 
     function renderHomeList(){
       let l = services.slice();
@@ -1108,6 +1197,50 @@
     // liste) faire tout le travail. Cf. demandes de Catherine du 20/09/2026 ("c'est franchement
     // imbuvable") et du lendemain ("ça fait vraiment chargé").
     holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
+  }
+
+  // ---------------------------------------------------------------- ACTIVITÉ RÉCENTE (accueil)
+  // Remplace l'ancienne grille de vignettes de services sous la recherche (retirée le 20-21/09/2026).
+  // Toujours 100% anonyme : aucun nom, aucun email, aucun identifiant de soignant — juste métier/statut,
+  // service, établissement, ville et notes, exactement ce qui est déjà public sur la fiche du service.
+  async function paintActiviteRecente(){
+    const holder = document.getElementById("activite-recente");
+    if (!holder) return;
+    holder.innerHTML = `
+      <div class="activite-card">
+        <div class="ar-live"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur Handoff Santé en ce moment</div>
+        <div class="ar-feed" id="ar-feed"><p class="hint">Chargement de l'activité récente…</p></div>
+      </div>`;
+    if (!db) return;
+    try {
+      const cutoff = new Date(Date.now() - 7*24*3600*1000).toISOString();
+      const [recentSnap, weekSnap] = await Promise.all([
+        db.collection("temoignages").orderBy("createdAt","desc").limit(30).get(),
+        db.collection("temoignages").where("createdAt",">=",cutoff).limit(1000).get()
+      ]);
+      const feedItems = recentSnap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(t => (t.signalements||0) < 3 && isPublished(t))
+        .slice(0, 5);
+      const weekCount = weekSnap.docs.length;
+      const feedEl = document.getElementById("ar-feed");
+      if (!feedEl) return;
+      feedEl.innerHTML = `
+        <div class="ar-count">💬 <b>${weekCount}</b> témoignage${weekCount>1?"s":""} déposé${weekCount>1?"s":""} ces 7 derniers jours</div>
+        ${feedItems.length === 0 ? "" : `
+          <ul class="ar-list">
+            ${feedItems.map(t => `
+              <li>
+                <span class="ar-meta">${esc(t.profession||"Soignant·e")} · ${esc(t.statut||"")} · ${esc(recencyLabelPublish(t.createdAt)||"")}</span>
+                <span class="ar-where">${esc(t.serviceNom||"")} — ${esc(t.etablissementNom||"")}${t.ville ? `, ${esc(t.ville)}` : ""}</span>
+                ${t.maltraitance||t.harcelement||t.racisme ? `<span class="badge warn" style="margin-top:4px">🚩 signalement</span>` : ""}
+              </li>`).join("")}
+          </ul>`}
+      `;
+    } catch(e) {
+      const feedEl = document.getElementById("ar-feed");
+      if (feedEl) feedEl.innerHTML = `<p class="hint">Activité récente indisponible pour le moment.</p>`;
+    }
   }
 
   function unrefEtabCardHtml(e){
@@ -2587,6 +2720,45 @@
     };
   }
 
+  // Graphique du nombre de visites/jour (table Supabase "visites", alimentée par trackVisit()) — fenêtre
+  // fixe de 14 jours, jours sans donnée affichés à zéro plutôt qu'absents, pour un axe toujours complet
+  // même juste après la mise en place de ce compteur.
+  function paintTrafficChart(rows){
+    const holder = document.getElementById("mod-traffic-chart");
+    if (!holder) return;
+    const byDay = {};
+    (rows||[]).forEach(r => { if (r.jour) byDay[r.jour] = r.total || 0; });
+    const days = [];
+    for (let i = 13; i >= 0; i--) days.push(new Date(Date.now() - i*24*3600*1000).toISOString().slice(0,10));
+    const values = days.map(j => byDay[j] || 0);
+    const max = Math.max(1, ...values);
+    const totalPeriode = values.reduce((a,b)=>a+b,0);
+    const fmtDay = (iso) => new Date(iso+"T00:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
+    holder.innerHTML = `
+      <div class="traffic-chart">
+        <div class="tc-summary">${totalPeriode} visite${totalPeriode>1?"s":""} comptabilisée${totalPeriode>1?"s":""} sur les 14 derniers jours</div>
+        <div class="tc-bars" role="img" aria-label="Nombre de visites par jour sur les 14 derniers jours, de ${fmtDay(days[0])} à ${fmtDay(days[days.length-1])}">
+          ${days.map((j,i) => {
+            const v = values[i];
+            const h = Math.max(3, Math.round((v/max)*100));
+            const showLabel = i===0 || i===days.length-1 || i%3===0;
+            return `<div class="tc-bar" tabindex="0" title="${fmtDay(j)} : ${plur(v,'visite')}">
+              <div class="tc-bar-fill" style="height:${h}%"></div>
+              <div class="tc-axis-label">${showLabel ? fmtDay(j) : ""}</div>
+            </div>`;
+          }).join("")}
+        </div>
+        <details class="tc-table-toggle">
+          <summary>Voir le détail en tableau</summary>
+          <table class="effectifs-table" style="margin-top:8px;max-width:320px;">
+            <thead><tr><th>Jour</th><th>Visites</th></tr></thead>
+            <tbody>${days.map((j,i)=>`<tr><td>${fmtDay(j)}</td><td class="mono">${values[i]}</td></tr>`).join("")}</tbody>
+          </table>
+        </details>
+      </div>
+    `;
+  }
+
   // ---------------------------------------------------------------- MODÉRATION (admin uniquement, ?admin=1)
   async function renderModeration(app){
     if (!isAdminMode()) {
@@ -2625,11 +2797,23 @@
       avisApp = avsnap.docs.map(d => ({ id:d.id, ...d.data() }));
     } catch(e) {}
     const avisAppMoyenne = avisApp.length ? round1(avisApp.reduce((a,x)=>a+(x.note||0),0)/avisApp.length) : null;
+    // Trafic du site (compteur de visites journalier, table "visites") — purement pour Catherine, aucune
+    // donnée personnelle : un jour, un total de visites, rien d'autre.
+    let visitesRows = [];
+    try {
+      const vsnap = await db.collection("visites").orderBy("jour","desc").limit(30).get();
+      visitesRows = vsnap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => (a.jour||"").localeCompare(b.jour||""));
+    } catch(e) {}
     app.innerHTML = `
       <div class="pagehead about">
         <div class="eyebrow">Mode admin</div>
         <h1>🛡 Modération</h1>
         <p class="lede">Témoignages signalés par la communauté (3 signalements = masqué automatiquement) et signalements graves — à traiter ici en attendant un vrai système de rôles. La décision finale reste toujours humaine — l'IA aide juste à trier plus vite. Tu peux aussi noter une gravité de 0 à 5 sur chaque signalement (inspiré de la plateforme étudiante GELULES) pour prioriser ta lecture au fil du temps.</p>
+
+        <h2>📈 Trafic du site</h2>
+        <div class="ar-live" style="margin-bottom:14px"><span class="ar-dot"></span> <span class="live-visitor-count">${presenceCount==null?"—":presenceCount}</span> personne${presenceCount===1?"":"s"} sur le site en ce moment</div>
+        <div id="mod-traffic-chart"></div>
+
         <h2>Témoignages à traiter</h2>
         ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
         <h2>Demandes de droit de réponse en attente</h2>
@@ -2655,6 +2839,7 @@
         ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
       </div>
     `;
+    paintTrafficChart(visitesRows);
     if (reponsesPending.length) {
       const rlist = document.getElementById("mod-reponses-list");
       rlist.innerHTML = reponsesPending.map(r => `
