@@ -403,6 +403,11 @@
   .mod-accordion summary{ font-size:15px; }
   .mod-accordion summary .badge{ margin-left:4px; }
   .mod-accordion .faq-a{ max-width:none; }
+  .badge-new{
+    display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700;
+    background:var(--critical-bg); color:var(--critical); padding:3px 8px; border-radius:999px;
+    animation:ar-pulse 2s infinite;
+  }
 
   .support-card{ display:flex; gap:14px; align-items:flex-start; background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:14px; padding:16px 18px; margin-bottom:24px; }
   .support-card .support-icon{ font-size:22px; flex:none; line-height:1; }
@@ -1196,10 +1201,25 @@
     if (!holder) return;
     unreferenced = unreferenced || [];
 
-    // On ne montre plus jamais la grille de vignettes en dessous de la recherche — qu'il y ait une
-    // requête en cours ou non — pour laisser le menu déroulant (établissement → ses services, en
-    // liste) faire tout le travail. Cf. demandes de Catherine du 20/09/2026 ("c'est franchement
-    // imbuvable") et du lendemain ("ça fait vraiment chargé").
+    // La grille de vignettes n'est plus affichée sous une RECHERCHE TEXTE — le menu déroulant
+    // (établissement → ses services) fait ce travail-là. Cf. demandes de Catherine du 20/09/2026
+    // ("c'est franchement imbuvable") et du lendemain ("ça fait vraiment chargé").
+    // MAIS les filtres région/type/"signalements uniquement" (chips sous la recherche) n'ont, eux,
+    // aucun équivalent dans ce menu déroulant : sans texte tapé, c'est leur SEULE façon d'afficher un
+    // résultat. Corrigé le 21/09/2026 : quand un de ces filtres est actif sans texte de recherche, on
+    // affiche bien la liste réelle des services correspondants (notamment pour retrouver les
+    // signalements graves depuis l'accueil, sans avoir à connaître le nom d'un établissement).
+    const filtresSeuls = !filterState.q && (filterState.onlyFlagged || filterState.region || filterState.type);
+    if (filtresSeuls) {
+      if (!list.length) {
+        holder.innerHTML = `<div class="empty"><h3>Aucun résultat</h3><p>Essaie d'élargir tes filtres.</p></div>`;
+        return;
+      }
+      holder.innerHTML = `<div class="grid">${list.map(cardHtml).join("")}</div>`;
+      holder.querySelectorAll(".card[data-id]").forEach(el => { el.onclick = () => nav("#/service/"+el.dataset.id); });
+      return;
+    }
+
     holder.innerHTML = `<div class="search-hint">🔍 Utilise le menu déroulant au-dessus, sous la barre de recherche : choisis ton établissement, puis ton service dans sa liste. <b>Pas encore référencé ?</b> Un bouton "Ajoute-le" t'y attend directement.</div>`;
   }
 
@@ -2763,6 +2783,36 @@
     `;
   }
 
+  // Notifications "nouveau" par section de la page modération (21/09/2026, à la demande de Catherine) :
+  // une date de dernière visite par section est gardée sur cet appareil (localStorage), pour afficher un
+  // badge rouge tant qu'un élément plus récent que cette date existe — sans avoir besoin de déplier la
+  // section pour le savoir. Premher passage sur une section : aucune notification rétroactive (on pose
+  // juste la date de référence à "maintenant"), seuls les éléments arrivés APRÈS compteront comme nouveaux.
+  function newCountForSection(items, sectionKey){
+    const key = "hs_mod_seen_" + sectionKey;
+    let lastSeen = null;
+    try { lastSeen = localStorage.getItem(key); } catch(e){}
+    if (!lastSeen) {
+      try { localStorage.setItem(key, new Date().toISOString()); } catch(e){}
+      return 0;
+    }
+    return items.filter(it => it.createdAt && it.createdAt > lastSeen).length;
+  }
+  function newBadgeHtml(n){
+    return n > 0 ? `<span class="badge-new">🔴 ${n} nouveau${n>1?"x":""}</span>` : "";
+  }
+  function wireModAccordionNotifications(){
+    document.querySelectorAll("details.mod-accordion[data-section]").forEach(det => {
+      det.addEventListener("toggle", () => {
+        if (det.open) {
+          try { localStorage.setItem("hs_mod_seen_"+det.dataset.section, new Date().toISOString()); } catch(e){}
+          const badge = det.querySelector(".badge-new");
+          if (badge) badge.remove();
+        }
+      });
+    });
+  }
+
   // Aperçu texte d'un témoignage en modération : avant, seul le champ "commentaire" libre était affiché,
   // donc un témoignage qui n'avait rempli que "points positifs"/"points à améliorer" (deux champs séparés
   // du formulaire) apparaissait vide, illisible — corrigé le 21/09/2026 pour combiner les trois.
@@ -2840,30 +2890,30 @@
           </div>
         </details>
 
-        <details class="faq-item mod-accordion" open>
-          <summary>🚩 Témoignages à traiter ${items.length ? `<span class="badge warn">${items.length}</span>` : ""} <span class="chev">＋</span></summary>
+        <details class="faq-item mod-accordion" data-section="traiter" open>
+          <summary>🚩 Témoignages à traiter ${items.length ? `<span class="badge warn">${items.length}</span>` : ""} ${newBadgeHtml(newCountForSection(items,"traiter"))} <span class="chev">＋</span></summary>
           <div class="faq-a" style="max-width:none">
             ${items.length === 0 ? `<p class="hint">Rien à modérer pour le moment 🎉</p>` : (sample ? `<button type="button" class="btn-text" id="mod-analyze-all">✦ Analyser tout avec l'IA</button>` : "") + `<div class="roadmap" id="mod-list"></div>`}
           </div>
         </details>
 
-        <details class="faq-item mod-accordion">
-          <summary>✉️ Demandes de droit de réponse ${reponsesPending.length ? `<span class="badge warn">${reponsesPending.length}</span>` : ""} <span class="chev">＋</span></summary>
+        <details class="faq-item mod-accordion" data-section="reponses">
+          <summary>✉️ Demandes de droit de réponse ${reponsesPending.length ? `<span class="badge warn">${reponsesPending.length}</span>` : ""} ${newBadgeHtml(newCountForSection(reponsesPending,"reponses"))} <span class="chev">＋</span></summary>
           <div class="faq-a" style="max-width:none">
             <p class="hint" style="margin-top:0">Vérifie que le·la demandeur·se représente bien l'établissement (email professionnel, recherche rapide) et que le texte ne cherche pas à identifier l'auteur·e anonyme, avant de publier.</p>
             ${reponsesPending.length === 0 ? `<p class="hint">Aucune demande en attente.</p>` : `<div class="roadmap" id="mod-reponses-list"></div>`}
           </div>
         </details>
 
-        <details class="faq-item mod-accordion">
-          <summary>💡 Suggestions reçues ${suggestionsNouvelles.length ? `<span class="badge warn">${suggestionsNouvelles.length}</span>` : ""} <span class="chev">＋</span></summary>
+        <details class="faq-item mod-accordion" data-section="suggestions">
+          <summary>💡 Suggestions reçues ${suggestionsNouvelles.length ? `<span class="badge warn">${suggestionsNouvelles.length}</span>` : ""} ${newBadgeHtml(newCountForSection(suggestionsNouvelles,"suggestions"))} <span class="chev">＋</span></summary>
           <div class="faq-a" style="max-width:none">
             ${suggestionsNouvelles.length === 0 ? `<p class="hint">Aucune nouvelle suggestion.</p>` : `<div class="roadmap" id="mod-suggestions-list"></div>`}
           </div>
         </details>
 
-        <details class="faq-item mod-accordion">
-          <summary>💛 Avis des soignants sur l'appli ${avisApp.length ? `<span class="badge muted">${avisApp.length}</span>` : ""} <span class="chev">＋</span></summary>
+        <details class="faq-item mod-accordion" data-section="avis">
+          <summary>💛 Avis des soignants sur l'appli ${avisApp.length ? `<span class="badge muted">${avisApp.length}</span>` : ""} ${newBadgeHtml(newCountForSection(avisApp,"avis"))} <span class="chev">＋</span></summary>
           <div class="faq-a" style="max-width:none">
             <p class="hint" style="margin-top:0">Recueilli juste après un dépôt de témoignage, une fois par appareil — pour suivre dans le temps si l'appli plaît, indépendamment des avis sur les services.</p>
             ${avisApp.length === 0 ? `<p class="hint">Aucun avis pour l'instant.</p>` : `
@@ -2880,8 +2930,8 @@
           </div>
         </details>
 
-        <details class="faq-item mod-accordion">
-          <summary>🕓 Derniers témoignages reçus ${recent.length ? `<span class="badge muted">${recent.length}</span>` : ""} <span class="chev">＋</span></summary>
+        <details class="faq-item mod-accordion" data-section="recent">
+          <summary>🕓 Derniers témoignages reçus ${recent.length ? `<span class="badge muted">${recent.length}</span>` : ""} ${newBadgeHtml(newCountForSection(recent,"recent"))} <span class="chev">＋</span></summary>
           <div class="faq-a" style="max-width:none">
             <p class="hint" style="margin-top:0">Vue lecture seule, pour garder un œil sur ce qui arrive — traités automatiquement sans relecture préalable, seulement retenus ${PUBLICATION_DELAI_H}h avant apparition publique (délai d'anonymat, pas une validation éditoriale — voir plus haut ci-dessus pour les signalés).</p>
             ${recent.length === 0 ? `<p class="hint">Aucun témoignage pour l'instant.</p>` : `<div class="roadmap" id="mod-recent-list"></div>`}
@@ -2889,6 +2939,7 @@
         </details>
       </div>
     `;
+    wireModAccordionNotifications();
     paintTrafficChart(visitesRows);
     if (reponsesPending.length) {
       const rlist = document.getElementById("mod-reponses-list");
