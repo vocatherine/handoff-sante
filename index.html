@@ -183,6 +183,8 @@
   .ar-list li:first-child{ border-top:none; padding-top:0; }
   .ar-meta{ font-size:11.5px; color:var(--muted); }
   .ar-where{ font-size:13.5px; color:var(--ink); font-weight:500; }
+  .ar-list a.ar-item{ display:flex; flex-direction:column; gap:2px; color:inherit; text-decoration:none; }
+  .ar-list a.ar-item:hover .ar-where{ text-decoration:underline; }
 
   /* ---------- Stat strip ---------- */
   .stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px; background:var(--border);
@@ -1087,12 +1089,19 @@
     qInput.onfocus = () => updateHeroSuggest();
     qInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } };
     document.addEventListener("click", (e) => {
+      // Un clic dans le menu déroulant peut en remplacer tout le contenu (établissement → ses services,
+      // ou "← Autres établissements") : l'élément cliqué n'est alors plus dans la page, closest() ne
+      // retrouve plus la barre de recherche et le menu se refermait à tort — cf. signalement de
+      // Catherine du 23/09/2026 (CHU de Saint-Étienne, services non affichés).
+      if (!e.target.isConnected) return;
       if (!e.target.closest(".hero-search-wrap")) hideHeroSuggest();
     });
     document.getElementById("f-search-btn").onclick = () => runSearch();
     function runSearch(){
       renderHomeList();
-      if (filterState.q && filterState.q.trim()) {
+      // Avec "Signalements uniquement" actif, les résultats (texte ET signalement) s'affichent dans la
+      // grille sous les filtres : on ferme le menu et on y amène — cf. demande de Catherine du 23/09/2026.
+      if (filterState.q && filterState.q.trim() && !filterState.onlyFlagged) {
         // Recherche texte : on garde le menu déroulant ouvert juste sous la barre, pas la peine
         // de scroller puisqu'il n'y a plus de grille de vignettes à aller voir plus bas.
         updateHeroSuggest();
@@ -1103,7 +1112,9 @@
     }
     document.getElementById("f-region").onchange = (e) => { filterState.region = e.target.value; renderHomeList(); };
     document.getElementById("f-type").onchange = (e) => { filterState.type = e.target.value; renderHomeList(); };
-    document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; renderHomeList(); };
+    // Le filtre s'applique immédiatement, avec ou sans texte, sans second clic sur "Rechercher"
+    // — cf. demande de Catherine du 23/09/2026.
+    document.getElementById("f-flag").onclick = () => { filterState.onlyFlagged = !filterState.onlyFlagged; runSearch(); };
 
     paintHomeList(list, unreferenced);
     paintActiviteRecente();
@@ -1142,7 +1153,9 @@
     const box = document.getElementById("hero-suggest");
     if (!box) return;
     const qRaw = filterState.q.trim();
-    if (!qRaw) { box.style.display = "none"; box.innerHTML = ""; suggestEtabId = null; return; }
+    // "Signalements uniquement" actif : les résultats filtrés sont dans la grille ; le menu, qui ne
+    // tient pas compte de ce filtre, la masquerait (cf. demande de Catherine du 23/09/2026).
+    if (!qRaw || filterState.onlyFlagged) { box.style.display = "none"; box.innerHTML = ""; suggestEtabId = null; return; }
 
     if (suggestEtabId) { renderEtabServicesSuggest(); return; }
 
@@ -1224,7 +1237,9 @@
     // résultat. Corrigé le 21/09/2026 : quand un de ces filtres est actif sans texte de recherche, on
     // affiche bien la liste réelle des services correspondants (notamment pour retrouver les
     // signalements graves depuis l'accueil, sans avoir à connaître le nom d'un établissement).
-    const filtresSeuls = !filterState.q && (filterState.onlyFlagged || filterState.region || filterState.type);
+    // Complété le 23/09/2026 (demande de Catherine) : "Signalements uniquement" affiche aussi la grille
+    // quand un texte est tapé — services correspondant à la recherche ET comportant un signalement grave.
+    const filtresSeuls = filterState.onlyFlagged || (!filterState.q.trim() && (filterState.region || filterState.type));
     if (filtresSeuls) {
       if (!list.length) {
         holder.innerHTML = `<div class="empty"><h3>Aucun résultat</h3><p>Essaie d'élargir tes filtres.</p></div>`;
@@ -1268,12 +1283,17 @@
         <div class="ar-count">💬 <b>${weekCount}</b> témoignage${weekCount>1?"s":""} déposé${weekCount>1?"s":""} ces 7 derniers jours</div>
         ${feedItems.length === 0 ? "" : `
           <ul class="ar-list">
-            ${feedItems.map(t => `
-              <li>
+            ${feedItems.map(t => {
+              // Lien vers la fiche du service seulement si ce service existe bien dans l'annuaire chargé
+              // — cf. demande de Catherine du 23/09/2026 (témoignages récents, dont signalements, non cliquables).
+              const lien = t.serviceId && services.some(s => s.id === t.serviceId);
+              return `
+              <li>${lien ? `<a class="ar-item" href="#/service/${esc(t.serviceId)}">` : ""}
                 <span class="ar-meta">${esc(t.profession||"Soignant·e")} · ${esc(t.statut||"")} · ${esc(recencyLabelPublish(t.createdAt)||"")}</span>
                 <span class="ar-where">${esc(t.serviceNom||"")} — ${esc(t.etablissementNom||"")}${t.ville ? `, ${esc(t.ville)}` : ""}</span>
                 ${t.maltraitance||t.harcelement||t.racisme ? `<span class="badge warn" style="margin-top:4px">🚩 signalement</span>` : ""}
-              </li>`).join("")}
+              ${lien ? "</a>" : ""}</li>`;
+            }).join("")}
           </ul>`}
       `;
     } catch(e) {
