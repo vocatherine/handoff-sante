@@ -500,7 +500,19 @@
   // Petite couche de compatibilité qui imite l'API Firestore utilisée partout dans le reste du fichier
   // (db.collection(x).doc(id).get()/.update()/.delete(), .add(), .where().orderBy().limit().get()/.onSnapshot())
   // pour ne pas avoir à réécrire chaque appel individuellement.
+  // Colonnes lisibles par le public, table par table (sécurisation du 23/09/2026, cf. demande de Catherine) :
+  // la base n'autorise plus la lecture de "temoignages" colonne par colonne que pour celles-ci — manageToken
+  // (code de gestion) et les champs de modération n'y sont plus lisibles. Un select("*") y serait refusé,
+  // on demande donc explicitement ces colonnes. Les autres tables restent en "*".
+  // ⚠️ Toute nouvelle colonne affichée sur un témoignage doit être ajoutée ici ET autorisée dans la base.
+  const COLONNES_PUBLIQUES = {
+    temoignages: "id,serviceId,serviceNom,etablissementNom,ville,profession,statut,dateMission," +
+      "noteCharge,noteAmbiance,noteDirection,noteHoraires,noteGlissement,noteRemuneration," +
+      "nbPatientsCharge,nbAsAvecToi,maltraitance,maltraitanceDetail,harcelement,harcelementDetail," +
+      "racisme,racismeDetail,commentaire,pointsPositifs,pointsAmeliorer,createdAt,signalements,moderationVerified"
+  };
   function createSupabaseDb(sb){
+    const colonnes = (name) => COLONNES_PUBLIQUES[name] || "*";
     function applyFilters(query, filters){
       filters.forEach(f => {
         const [field, op, val] = f;
@@ -525,7 +537,7 @@
         doc(id){
           return {
             async get(){
-              let q = sb.from(name).select("*").eq("id", id).maybeSingle();
+              let q = sb.from(name).select(colonnes(name)).eq("id", id).maybeSingle();
               const { data, error } = await q;
               if (error) throw error;
               return { data: () => data ? (({id:_id, ...rest}) => rest)(data) : undefined, exists: !!data, id };
@@ -551,7 +563,7 @@
           return { id };
         },
         async get(){
-          let q = sb.from(name).select("*");
+          let q = sb.from(name).select(colonnes(name));
           q = applyFilters(q, filters);
           if (orderBy) q = q.order(orderBy.field, { ascending: orderBy.dir !== "desc" });
           if (limitN) q = q.limit(limitN);
