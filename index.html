@@ -527,8 +527,10 @@
       "nbPatientsCharge,nbAsAvecToi,maltraitance,maltraitanceDetail,harcelement,harcelementDetail," +
       "racisme,racismeDetail,commentaire,pointsPositifs,pointsAmeliorer,createdAt,signalements,moderationVerified"
   };
-  function createSupabaseDb(sb){
-    const colonnes = (name) => COLONNES_PUBLIQUES[name] || "*";
+  // L'administratrice connectée (vérifiée par la base, cf. est_admin()) lit les tables complètes ;
+  // pour tout le monde, la liste publique reste la seule lecture possible de "temoignages".
+  function createSupabaseDb(sb, lectureComplete){
+    const colonnes = (name) => (lectureComplete && lectureComplete()) ? "*" : (COLONNES_PUBLIQUES[name] || "*");
     function applyFilters(query, filters){
       filters.forEach(f => {
         const [field, op, val] = f;
@@ -601,7 +603,15 @@
         }
       };
     }
-    return { collection: (name) => CollectionRef(name, [], null, null) };
+    return {
+      collection: (name) => CollectionRef(name, [], null, null),
+      // Appel d'une fonction serveur Supabase (opérations sensibles vérifiées côté base).
+      async rpc(fn, args){
+        const { data, error } = await sb.rpc(fn, args || {});
+        if (error) throw error;
+        return data;
+      }
+    };
   }
 
   // ---------------------------------------------------------------- consts
@@ -899,9 +909,13 @@
     if (ttLink) ttLink.onclick = socialComingSoon("TikTok");
 
     try {
-      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      db = createSupabaseDb(sb);
+      // La session de l'administratrice est gardée dans sessionStorage (effacée à la fermeture de
+      // l'onglet) plutôt que dans localStorage (qui persiste) — cf. relecture de sécurité du 24/09/2026.
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { storage: window.sessionStorage } });
+      db = createSupabaseDb(sb, () => isAdminMode());
     } catch(e){ db = null; }
+    // Session administratrice éventuellement déjà ouverte dans ce navigateur : vérifiée par la base.
+    if (sb) verifierAdmin();
     setupPresence();
     trackVisit();
     // Le résumé IA (aiSummary) reposait sur window.claude.use("sample"), une capacité propre aux
@@ -910,9 +924,13 @@
     // l'API Anthropic avec une clé gardée côté serveur — jamais exposée au navigateur.
     sample = {
       json: async (prompt) => {
+        // Jeton de session de l'administratrice connectée, s'il y en a un : la fonction serveur
+        // pourra réserver la synthèse IA et l'aide à la modération à l'administratrice.
+        let jeton = null;
+        try { const { data: { session } } = await sb.auth.getSession(); jeton = session ? session.access_token : null; } catch(e){}
         const r = await fetch("/api/claude", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...(jeton ? { authorization: "Bearer " + jeton } : {}) },
           body: JSON.stringify({ prompt }),
         });
         if (!r.ok) {
@@ -920,6 +938,17 @@
           try { code = (await r.json()).code || code; } catch(e) {}
           const err = new Error(code); err.code = code; throw err;
         }
+        return r.json();
+      },
+      // Vérification des noms propres (publique) : la consigne est construite par le serveur,
+      // qui refuse toute autre demande venant d'un visiteur — cf. sécurisation du 24/09/2026.
+      verifierNoms: async (textes) => {
+        const r = await fetch("/api/claude", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ tache: "verification_noms", textes }),
+        });
+        if (!r.ok) { const err = new Error("verification_indisponible"); err.code = r.status; throw err; }
         return r.json();
       }
     };
@@ -998,18 +1027,20 @@
     // Le bouton "aperçu visiteur" reste visible dès qu'on a débloqué l'admin dans ce navigateur, même
     // pendant l'aperçu lui-même, pour pouvoir repasser en mode admin facilement.
     const previewBtn = document.getElementById("nav-preview-toggle");
-    previewBtn.hidden = !adminUnlocked;
+    previewBtn.hidden = !adminConnecte;
     previewBtn.textContent = previewAsVisitor ? "🛡 Repasser en mode admin" : "👁 Aperçu visiteur";
     paintContribPill();
 
     if (route.startsWith("#/service/")) { renderServiceDetail(app, route.slice(10).split("?")[0]); return; }
+    // "#/temoignage-confirme/" doit être testé AVANT "#/temoignage", sinon la page de confirmation
+    // (celle qui affiche le code) n'apparaît jamais.
+    if (route.startsWith("#/temoignage-confirme/")) { renderTemoignageConfirme(app, route); return; }
     if (route.startsWith("#/temoignage")) { renderWizard(app); return; }
     if (route.startsWith("#/service-nouveau")) { renderNouveauService(app, route); return; }
     if (route.startsWith("#/faq")) { renderFaq(app); return; }
     if (route.startsWith("#/cgu")) { renderCgu(app); return; }
     if (route.startsWith("#/confidentialite")) { renderConfidentialite(app); return; }
     if (route.startsWith("#/mentions-legales")) { renderMentionsLegales(app); return; }
-    if (route.startsWith("#/temoignage-confirme/")) { renderTemoignageConfirme(app, route); return; }
     if (route.startsWith("#/gerer-temoignage")) { renderGererTemoignage(app, route); return; }
     if (route.startsWith("#/droit-de-reponse/")) { renderDroitReponse(app, route); return; }
     if (route.startsWith("#/suggestion")) { renderSuggestion(app); return; }
@@ -1558,7 +1589,13 @@
     const btn = document.getElementById("cf-submit");
     btn.disabled = true; btn.textContent = "Enregistrement…";
     try {
-      await db.collection("services").doc(s.id).update(updates);
+      // Fonction serveur : ne peut modifier QUE les lits et effectifs, jamais le nom ou l'établissement.
+      await db.rpc("completer_service", {
+        p_id: s.id,
+        p_nb_lits: updates.nbLits ?? null,
+        p_effectifs_jour: updates.effectifsJour ?? null,
+        p_effectifs_nuit: updates.effectifsNuit ?? null
+      });
       Object.assign(s, updates);
       flashMsg = { type:"good", text:"Merci, ces informations sont maintenant visibles pour tout le monde." };
       nav("#/service/"+s.id);
@@ -1593,35 +1630,56 @@
   // qu'elle est générée par IA, et sans lui donner la main pour la (re)générer. Ce contrôle n'est
   // accessible qu'en mode admin, le temps qu'un vrai rôle admin existe.
   //
-  // Deux façons d'activer le mode admin :
-  // 1) ?admin=1 dans le hash (peut ne pas survivre au chargement via un lien de partage qui encapsule
-  //    la page — le hash de l'URL affichée n'arrive alors pas jusqu'à ce script) ;
-  // 2) un déverrouillage manuel (cliquer 5 fois sur le logo "Handoff Santé" + code), qui ne dépend
-  //    d'aucun mécanisme d'URL et fonctionne donc dans tous les cas. Une fois déverrouillé, c'est
-  //    mémorisé dans ce navigateur (localStorage) pour ne pas avoir à recommencer à chaque visite.
-  let adminUnlocked = false;
-  try { adminUnlocked = localStorage.getItem("hs-admin") === "1"; } catch(e){}
+  // Mode admin (sécurisation du 24/09/2026, cf. demande de Catherine) : plus de ?admin=1 ni de code écrit
+  // dans la page — n'importe qui pouvait les lire. Catherine se connecte avec son compte Supabase (e-mail +
+  // mot de passe, inscriptions publiques désactivées), et c'est la BASE qui vérifie à chaque requête qu'il
+  // s'agit bien d'elle (fonction est_admin() + règles RLS "admin_tout"). Cacher les boutons ici n'est plus
+  // qu'un confort d'affichage : la sécurité est côté serveur.
+  // Accès : cliquer 5 fois sur le logo "Handoff Santé" → fenêtre de connexion.
+  let adminConnecte = false;
+  // Nettoyage de l'ancien déverrouillage local, devenu sans effet.
+  try { localStorage.removeItem("hs-admin"); } catch(e){}
   // "Aperçu visiteur" : bascule temporaire (non mémorisée, remise à zéro au rechargement) pour qu'une
-  // fois débloqué, l'admin puisse voir la page exactement comme un visiteur normal la voit.
+  // fois connectée, l'admin puisse voir la page exactement comme un visiteur normal la voit.
   let previewAsVisitor = false;
-  function isAdminMode(){ return !previewAsVisitor && (adminUnlocked || /(^|[?&])admin=1(&|$)/.test(location.hash)); }
+  function isAdminMode(){ return !previewAsVisitor && adminConnecte; }
   function togglePreviewAsVisitor(){
     previewAsVisitor = !previewAsVisitor;
     render();
   }
   window.togglePreviewAsVisitor = togglePreviewAsVisitor;
 
+  // Vérifie auprès de la base si la session en cours est celle de l'administratrice.
+  async function verifierAdmin(){
+    let ok = false;
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) ok = (await db.rpc("est_admin")) === true;
+    } catch(e){ ok = false; }
+    if (ok !== adminConnecte) { adminConnecte = ok; render(); }
+    return ok;
+  }
+
   // On évite prompt()/alert() : dans certains contextes d'affichage (page encapsulée), les boîtes de
   // dialogue natives du navigateur sont bloquées silencieusement — rien ne semble se passer au clic.
   // On construit donc une mini-modale directement dans la page.
   let logoClicks = 0, logoClickTimer = null;
-  function onLogoClick(){
+  async function onLogoClick(){
     logoClicks++;
     clearTimeout(logoClickTimer);
     logoClickTimer = setTimeout(() => { logoClicks = 0; }, 1500);
     if (logoClicks >= 5) {
       logoClicks = 0;
-      openAdminCodeModal();
+      if (adminConnecte) {
+        if (await showConfirm("Se déconnecter du mode admin ?")) {
+          try { await sb.auth.signOut(); } catch(e){}
+          adminConnecte = false;
+          nav("#/");
+          render();
+        }
+      } else {
+        openAdminCodeModal();
+      }
     } else {
       nav("#/");
     }
@@ -1629,39 +1687,51 @@
   window.onLogoClick = onLogoClick;
 
   function openAdminCodeModal(){
+    // Connexion possible UNIQUEMENT dans un onglet ouvert directement sur handoffsante.fr/#/moderation :
+    // la publicité (script tiers) n'y est jamais chargée — cf. décision de Catherine du 24/09/2026.
+    let ongletSansPub = false;
+    try { ongletSansPub = sessionStorage.getItem("hs-sans-pub") === "1"; } catch(e){}
+    if (!ongletSansPub) {
+      showAlert("Pour te connecter, ouvre handoffsante.fr/#/moderation dans un NOUVEL onglet, puis clique 5 fois sur le logo.");
+      return;
+    }
     closeAdminCodeModal();
     const overlay = document.createElement("div");
     overlay.id = "admin-code-overlay";
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(20,20,20,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:24px;max-width:320px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);">
-        <div style="font-weight:600;margin-bottom:12px;">Code administrateur</div>
-        <input id="admin-code-input" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:16px;margin-bottom:8px;" />
+      <div style="background:#fff;border-radius:12px;padding:20px;max-width:320px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.25);font-family:inherit;">
+        <div style="font-weight:600;margin-bottom:12px;">Connexion administratrice</div>
+        <input id="admin-email-input" type="email" autocomplete="username" placeholder="E-mail" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:16px;margin-bottom:8px;">
+        <input id="admin-code-input" type="password" autocomplete="current-password" placeholder="Mot de passe" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:16px;margin-bottom:8px;">
         <div id="admin-code-error" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:8px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button id="admin-code-cancel" style="padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;">Annuler</button>
-          <button id="admin-code-ok" style="padding:8px 14px;border-radius:8px;border:none;background:#111;color:#fff;cursor:pointer;">Valider</button>
+          <button id="admin-code-ok" style="padding:8px 14px;border-radius:8px;border:none;background:#111;color:#fff;cursor:pointer;">Se connecter</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    const emailInput = document.getElementById("admin-email-input");
     const input = document.getElementById("admin-code-input");
-    input.focus();
-    const submit = () => {
-      if (input.value === "escale2026") {
-        adminUnlocked = true;
-        try { localStorage.setItem("hs-admin", "1"); } catch(e){}
-        document.getElementById("nav-moderation").hidden = false;
+    const errEl = document.getElementById("admin-code-error");
+    emailInput.focus();
+    const submit = async () => {
+      errEl.textContent = "";
+      if (!sb) { errEl.textContent = "Connexion aux données indisponible."; return; }
+      const { error } = await sb.auth.signInWithPassword({ email: emailInput.value.trim(), password: input.value });
+      input.value = "";
+      if (error) { errEl.textContent = "Identifiants incorrects."; return; }
+      if (await verifierAdmin()) {
         closeAdminCodeModal();
-        ouvrirModeration();
+        nav("#/moderation");
       } else {
-        document.getElementById("admin-code-error").textContent = "Code incorrect.";
-        input.value = "";
-        input.focus();
+        try { await sb.auth.signOut(); } catch(e){}
+        errEl.textContent = "Ce compte n'a pas les droits d'administration.";
       }
     };
     document.getElementById("admin-code-ok").onclick = submit;
     document.getElementById("admin-code-cancel").onclick = closeAdminCodeModal;
-    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); if (e.key === "Escape") closeAdminCodeModal(); });
+    [emailInput, input].forEach(el => el.addEventListener("keydown", e => { if (e.key === "Enter") submit(); if (e.key === "Escape") closeAdminCodeModal(); }));
     overlay.addEventListener("click", e => { if (e.target === overlay) closeAdminCodeModal(); });
   }
   function closeAdminCodeModal(){
@@ -1756,7 +1826,9 @@
       let items = [];
       if (db) {
         const snap = await db.collection("temoignages").where("serviceId","==",s.id).orderBy("createdAt","desc").limit(30).get();
-        items = snap.docs.map(d => d.data()).filter(t => (t.signalements||0) < 3);
+        // Uniquement les témoignages déjà publiés : la synthèse est publique, elle ne doit pas
+        // dévoiler un témoignage encore dans son délai de 48 h.
+        items = snap.docs.map(d => d.data()).filter(t => (t.signalements||0) < 3 && isPublished(t));
       }
       const lines = items.map((t,i) => `${i+1}. [${t.profession||"?"}, ${t.statut||"?"}] charge=${t.noteCharge}/5 ambiance=${t.noteAmbiance}/5 direction=${t.noteDirection}/5${t.noteHoraires!=null?` horaires=${t.noteHoraires}/5`:""}${t.noteGlissement!=null?` glissement_taches=${t.noteGlissement}/5`:""}${t.noteRemuneration!=null?` remuneration=${t.noteRemuneration}/5`:""}${t.nbPatientsCharge!=null?` patients_a_charge=${t.nbPatientsCharge}`:""}${t.nbAsAvecToi!=null?` as_presents=${t.nbAsAvecToi}`:""}${t.maltraitance?" [maltraitance signalée]":""}${t.harcelement?" [harcèlement signalé]":""}${t.racisme?" [racisme signalé]":""}${t.pointsPositifs?` — plus: "${t.pointsPositifs.slice(0,200)}"`:""}${t.pointsAmeliorer?` — moins: "${t.pointsAmeliorer.slice(0,200)}"`:""} — "${(t.commentaire||"").slice(0,400)}"`).join("\n");
       const prompt = `Tu résumes des témoignages anonymes de soignants et étudiants en santé ayant travaillé dans un service de soin, pour aider d'autres soignants à décider s'ils veulent y prendre une mission.\n\nService : ${s.nom} (${s.typeService||"type non précisé"}) — ${s.etablissementNom}, ${s.etablissementVille||""}.\n\nTémoignages (les plus récents) :\n${lines || "(aucun témoignage textuel)"}\n\nRéponds UNIQUEMENT avec un objet JSON de cette forme, en français, neutre et factuel, sans inventer de détails absents des témoignages :\n{"synthese": "2 à 3 phrases résumant l'expérience globale rapportée", "points_forts": ["jusqu'à 3 points positifs concrets"], "points_vigilance": ["jusqu'à 3 points d'attention ou signalements, formulés sobrement, sans accusation individuelle"]}`;
@@ -1835,7 +1907,7 @@
         ${flags.some(f=>f.d) ? `<p class="comment" style="color:var(--critical);font-size:13px">${flags.filter(f=>f.d).map(f=>esc(f.l)+" : "+esc(f.d)).join(" · ")}</p>` : ""}
         ${(t.pointsPositifs || t.pointsAmeliorer) ? `<div class="testi-pluminus">${t.pointsPositifs ? `<p class="comment">👍 ${esc(t.pointsPositifs)}</p>` : ""}${t.pointsAmeliorer ? `<p class="comment">👎 ${esc(t.pointsAmeliorer)}</p>` : ""}</div>` : ""}
         ${t.commentaire ? `<p class="comment">${esc(t.commentaire)}</p>` : ""}
-        ${reponsesMap[t.id] ? `<div class="testi-reponse"><b>Réponse de la direction de ${esc(reponsesMap[t.id].etablissementNom || service.etablissementNom)}</b><p>${esc(reponsesMap[t.id].texteReponse)}</p></div>` : ""}
+        ${reponsesMap[t.id] ? `<div class="testi-reponse"><b>Réponse de la direction de ${esc(reponsesMap[t.id].etablissementNom || service.etablissementNom)}</b><p>${esc(reponsesMap[t.id].texte)}</p></div>` : ""}
         <div class="testi-foot">
           <button class="report-btn" onclick="reportTestimonial('${esc(t.id)}')">Signaler ce témoignage</button>
           ${!reponsesMap[t.id] ? `<button class="report-btn" onclick="nav('#/droit-de-reponse/${esc(t.id)}?service=${esc(service.id)}')">🏥 Répondre en tant qu'établissement</button>` : ""}
@@ -2257,9 +2329,9 @@
     const nonEmpty = texts.filter(t => t && t.trim().length > 0);
     if (!nonEmpty.length) return { ok:true };
     if (!sample) return { ok:true }; // pas de contrôle IA possible : on laisse passer, la règle communautaire + le signalement prennent le relais
-    const prompt = `Tu relis un extrait de témoignage anonyme de soignant pour repérer une seule chose : est-ce qu'une personne précise (un·e collègue, un·e cadre, un·e médecin, un·e patient·e...) y est nommée par son prénom, son nom de famille, ou un surnom permettant de l'identifier ?\n\nIgnore complètement : les mentions génériques par fonction ("le médecin", "la cadre de santé", "l'infirmière de nuit"), les noms d'établissements ou de services, les initiales seules isolées d'un contexte identifiant.\n\nTexte à relire :\n"""\n${nonEmpty.join("\n---\n")}\n"""\n\nRéponds UNIQUEMENT avec un objet JSON : {"contient_nom": true ou false, "extrait": "le passage concerné si contient_nom est true, sinon une chaîne vide"}`;
+    // La consigne de vérification est désormais construite par le serveur (api/claude.js).
     try {
-      const result = await sample.json(prompt, { modelTier:"default", cache:false });
+      const result = await sample.verifierNoms(nonEmpty);
       if (result && result.contient_nom) return { ok:false, extrait: result.extrait || "" };
       return { ok:true };
     } catch (e) {
@@ -2315,11 +2387,13 @@
         pointsPositifs: document.getElementById("tm-plus").value.trim(),
         pointsAmeliorer: document.getElementById("tm-moins").value.trim(),
         commentaire: document.getElementById("tm-commentaire").value.trim(),
-        createdAt: new Date().toISOString(), signalements: 0,
-        manageToken: genManageToken()
+        createdAt: new Date().toISOString()
       };
-      const ref = await withRetry(() => db.collection("temoignages").add(data));
-      await recomputeServiceAggregates(service.id);
+      // Dépôt par fonction serveur : la base fixe la date de dépôt, génère le code de gestion
+      // (aléatoire, 100 bits) et n'en conserve que l'empreinte. Le code n'est renvoyé qu'ici, une fois.
+      const res = await withRetry(() => db.rpc("deposer_temoignage", { p: data }));
+      data.manageToken = res.code;
+      const ref = { id: res.id };
       bumpContribCount();
       const already = getContribCount();
       flashMsg = { type:"good", text: already <= 1
@@ -2328,37 +2402,21 @@
       addMyTestimonial({ token: data.manageToken, serviceId: service.id, serviceNom: service.nom, etablissementNom: service.etablissementNom, ville: service.etablissementVille||"", createdAt: data.createdAt });
       wiz = { step:1, service:null, etabDraft:null, etabPrefillId:null, maxStep:1, form:null };
       const hadFlags = flags.maltraitance || flags.harcelement || flags.racisme;
-      nav("#/temoignage-confirme/"+service.id+"/"+encodeURIComponent(data.manageToken)+"/"+(ref.id||"")+"?care="+(hadFlags?"1":"0"));
+      // Le code passe par sessionStorage (limité à cet onglet), plus par l'adresse de la page.
+      try { sessionStorage.setItem("hs_code_a_afficher", data.manageToken); } catch(e){}
+      nav("#/temoignage-confirme/"+service.id+"/-/"+(ref.id||"")+"?care="+(hadFlags?"1":"0"));
     } catch(e) {
       errEl.textContent = "La publication a échoué, réessaie.";
       btn.disabled = false; btn.textContent = "Publier le témoignage";
     }
   }
 
+  // Les moyennes des services sont calculées par la base, sur les seuls témoignages publiés.
+  // Après une suppression en modération, l'administratrice déclenche le recalcul immédiatement ;
+  // pour un visiteur, rien à faire.
   async function recomputeServiceAggregates(serviceId){
-    const snap = await db.collection("temoignages").where("serviceId","==",serviceId).limit(500).get();
-    const items = snap.docs.map(d => d.data());
-    const charge = items.map(t=>t.noteCharge).filter(v=>v!=null);
-    const ambiance = items.map(t=>t.noteAmbiance).filter(v=>v!=null);
-    const direction = items.map(t=>t.noteDirection).filter(v=>v!=null);
-    const horaires = items.map(t=>t.noteHoraires).filter(v=>v!=null);
-    const glissement = items.map(t=>t.noteGlissement).filter(v=>v!=null);
-    const remun = items.map(t=>t.noteRemuneration).filter(v=>v!=null);
-    const nbPatients = items.map(t=>t.nbPatientsCharge).filter(v=>v!=null);
-    const nbAs = items.map(t=>t.nbAsAvecToi).filter(v=>v!=null);
-    const avgCharge = avgOf(charge), avgAmbiance = avgOf(ambiance), avgDirection = avgOf(direction), avgRemuneration = avgOf(remun);
-    const avgHoraires = avgOf(horaires), avgGlissement = avgOf(glissement);
-    const avgNbPatients = nbPatients.length ? round1(nbPatients.reduce((a,b)=>a+b,0)/nbPatients.length) : null;
-    const avgNbAs = nbAs.length ? round1(nbAs.reduce((a,b)=>a+b,0)/nbAs.length) : null;
-    const globals = [avgCharge, avgAmbiance, avgDirection].filter(v=>v!=null);
-    const avgGlobal = globals.length ? round1(globals.reduce((a,b)=>a+b,0)/globals.length) : null;
-    await db.collection("services").doc(serviceId).update({
-      nbTemoignages: items.length, avgCharge, avgAmbiance, avgDirection, avgHoraires, avgGlissement, avgRemuneration, avgGlobal,
-      avgNbPatients, avgNbAs,
-      flagMaltraitance: items.filter(t=>t.maltraitance).length,
-      flagHarcelement: items.filter(t=>t.harcelement).length,
-      flagRacisme: items.filter(t=>t.racisme).length
-    });
+    if (!isAdminMode()) return;
+    try { await db.rpc("recalculer_moyennes"); } catch(e){}
   }
 
   // ---------------------------------------------------------------- À PROPOS
@@ -2520,7 +2578,8 @@
     const [pathPart, queryPart] = route.split("?");
     const parts = pathPart.split("/"); // #/temoignage-confirme/<serviceId>/<token>/<docId>
     const serviceId = decodeURIComponent(parts[2]||"");
-    const token = decodeURIComponent(parts[3]||"");
+    let token = decodeURIComponent(parts[3]||"");
+    if (token === "-") { try { token = sessionStorage.getItem("hs_code_a_afficher") || ""; } catch(e){ token = ""; } }
     const hadCare = /(^|&)care=1(&|$)/.test(queryPart||"");
     app.innerHTML = `
       <div class="pagehead about">
@@ -2595,9 +2654,10 @@
   }
 
   async function renderGererTemoignage(app, route){
-    const q = (route.split("?")[1]||"");
-    const m = q.match(/(?:^|&)code=([^&]+)/);
-    const prefill = m ? decodeURIComponent(m[1]) : "";
+    // Le code n'est plus jamais lu dans l'adresse de la page (historique, synchronisation) :
+    // uniquement transmis par "Mes témoignages" via sessionStorage.
+    let prefill = "";
+    try { prefill = sessionStorage.getItem("hs_code_a_gerer") || ""; sessionStorage.removeItem("hs_code_a_gerer"); } catch(e){}
     app.innerHTML = `
       <div class="pagehead about">
         <div class="eyebrow">Anonyme, mais réversible</div>
@@ -2619,9 +2679,10 @@
       if (!code) { errEl.textContent = "Merci de saisir ton code."; return; }
       if (!db) { errEl.textContent = "Connexion aux données indisponible pour le moment."; return; }
       try {
-        const snap = await db.collection("temoignages").where("manageToken","==",code).limit(1).get();
-        if (snap.docs.length === 0) { errEl.textContent = "Aucun témoignage ne correspond à ce code."; return; }
-        const t = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        // La base compare l'empreinte du code et ne renvoie que les champs modifiables de CE témoignage.
+        const t = await db.rpc("lire_mon_temoignage", { p_code: code });
+        if (!t) { errEl.textContent = "Aucun témoignage ne correspond à ce code."; return; }
+        t.code = code;
         paintManageForm(resultEl, t);
       } catch(e) {
         errEl.textContent = "La recherche a échoué, réessaie.";
@@ -2648,7 +2709,7 @@
               <span>${isPublished(t) ? esc(recencyLabelPublish(t.createdAt)||"") : `🕓 En délai de publication — ${esc(publicationRemainingLabel(t))}`} · code ${esc(t.token)}</span>
               <div style="display:flex; gap:10px; margin-top:8px;">
                 <a class="btn-text" href="#/service/${esc(t.serviceId)}">Voir le service</a>
-                <a class="btn-text" href="#/gerer-temoignage?code=${encodeURIComponent(t.token)}">Modifier / supprimer</a>
+                <a class="btn-text" href="#/gerer-temoignage" data-code="${esc(t.token)}" onclick="try{ sessionStorage.setItem('hs_code_a_gerer', this.dataset.code); }catch(e){}">Modifier / supprimer</a>
               </div>
             </div>
           </div>
@@ -2677,15 +2738,16 @@
         const newComment = document.getElementById("gt-commentaire").value.trim();
         const newPlus = document.getElementById("gt-plus").value.trim();
         const newMoins = document.getElementById("gt-moins").value.trim();
-        await db.collection("temoignages").doc(t.id).update({ commentaire: newComment, pointsPositifs: newPlus, pointsAmeliorer: newMoins });
+        const ok = await db.rpc("modifier_mon_temoignage", { p_code: t.code, p_commentaire: newComment, p_plus: newPlus, p_moins: newMoins });
+        if (!ok) { errEl.textContent = "Ce témoignage n'est plus modifiable."; return; }
         holder.innerHTML = `<div class="banner good" style="margin-top:18px;">Modifications enregistrées, merci.</div>`;
       } catch(e) { errEl.textContent = "L'enregistrement a échoué, réessaie."; }
     };
     document.getElementById("gt-delete").onclick = async () => {
       if (!(await showConfirm("Supprimer définitivement ce témoignage ? C'est irréversible."))) return;
       try {
-        await db.collection("temoignages").doc(t.id).delete();
-        await recomputeServiceAggregates(t.serviceId);
+        const ok = await db.rpc("supprimer_mon_temoignage", { p_code: t.code });
+        if (!ok) { document.getElementById("gt-save-error").textContent = "Ce témoignage a déjà été supprimé."; return; }
         holder.innerHTML = `<div class="banner good" style="margin-top:18px;">Ton témoignage a été supprimé définitivement.</div>`;
       } catch(e) { document.getElementById("gt-save-error").textContent = "La suppression a échoué, réessaie."; }
     };
@@ -2744,10 +2806,10 @@
       }
       btn.textContent = "Envoi…";
       try {
-        await db.collection("reponses").add({
-          temoignageId, serviceId,
-          demandeurNom: nom, etablissementNom: etab, demandeurEmail: email,
-          texteReponse: texte, status: "en_attente", createdAt: new Date().toISOString()
+        // Fonction serveur : la réponse (publique après validation) et les coordonnées du demandeur
+        // (réservées à la modération) sont enregistrées séparément.
+        await db.rpc("demander_droit_reponse", {
+          p_temoignage_id: temoignageId, p_nom: nom, p_etablissement: etab, p_email: email, p_texte: texte
         });
         holder.innerHTML = `<div class="banner good">Merci. Votre demande a été transmise pour vérification — vous serez contacté·e par email sous quelques jours ouvrés si des précisions sont nécessaires, puis votre réponse sera publiée sous le témoignage concerné.</div>`;
       } catch(e) {
@@ -2885,7 +2947,7 @@
     return `<p style="font-size:13px; margin:8px 0 0; color:${colorVar};">${esc(text)}</p>`;
   }
 
-  // ---------------------------------------------------------------- MODÉRATION (admin uniquement, ?admin=1)
+  // ---------------------------------------------------------------- MODÉRATION (administratrice connectée, vérifiée par la base)
   // Onglet "sans publicité" : ouvert directement sur #/moderation. Le marqueur est posé par le chargeur
   // AdSense de l'en-tête (build_index.py) AVANT tout script tiers ; il vaut pour tout l'onglet.
   function ongletSansPub(){
@@ -2927,6 +2989,13 @@
     try {
       const rsnap = await db.collection("reponses").where("status","==","en_attente").limit(200).get();
       reponsesPending = rsnap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => (a.createdAt||"").localeCompare(b.createdAt||""));
+      // Coordonnées des demandeurs : table séparée, lisible par la seule administratrice.
+      if (reponsesPending.length) {
+        const { data: contacts } = await sb.from("reponses_contacts").select("reponseId,nom,email,etablissement")
+          .in("reponseId", reponsesPending.map(r => r.id));
+        const parId = Object.fromEntries((contacts||[]).map(c => [c.reponseId, c]));
+        reponsesPending.forEach(r => { r.contact = parId[r.id] || {}; });
+      }
     } catch(e) {}
     let suggestionsNouvelles = [];
     try {
@@ -3020,9 +3089,9 @@
         <div class="roadstep" data-id="${esc(r.id)}">
           <span class="idx">🏥</span>
           <div style="flex:1">
-            <b>${esc(r.etablissementNom)}</b>
-            <span>${esc(r.demandeurNom)} · ${esc(r.demandeurEmail)}</span>
-            <p style="font-size:13px; margin:8px 0 0; color:var(--ink)">${esc(r.texteReponse)}</p>
+            <b>${esc((r.contact||{}).etablissement)}</b>
+            <span>${esc((r.contact||{}).nom)} · ${esc((r.contact||{}).email)}</span>
+            <p style="font-size:13px; margin:8px 0 0; color:var(--ink)">${esc(r.texte)}</p>
             <div style="display:flex; gap:10px; margin-top:10px;">
               <button type="button" class="btn-text mod-reponse-publish" data-id="${esc(r.id)}">Publier</button>
               <button type="button" class="btn-text mod-reponse-reject" data-id="${esc(r.id)}" style="color:var(--critical)">Rejeter</button>
