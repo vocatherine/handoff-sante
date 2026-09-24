@@ -5,9 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Handoff Santé — avis entre soignants sur les services de soin, pour savoir où on met les pieds avant une mission.">
 <title>Handoff Santé</title>
-<!-- Vérification Google AdSense (21/09/2026) -->
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7148612339271747"
-     crossorigin="anonymous"></script>
+<!-- Google AdSense (21/09/2026), chargé à la demande depuis le 24/09/2026 (cf. demande de Catherine) :
+     jamais dans un onglet ouvert directement sur la modération (#/moderation), pour qu'aucun script
+     tiers ne tourne là où l'administratrice se connecte. Le marqueur reste pour tout l'onglet.
+     La balise meta ci-dessous permet à Google de vérifier le site sans charger de script. -->
+<meta name="google-adsense-account" content="ca-pub-7148612339271747">
+<script>
+  (function(){
+    try {
+      if (/^#\/moderation/.test(location.hash)) sessionStorage.setItem("hs-sans-pub", "1");
+      if (sessionStorage.getItem("hs-sans-pub") === "1") return;
+    } catch(e) { if (/^#\/moderation/.test(location.hash)) return; }
+    var s = document.createElement("script");
+    s.async = true; s.crossOrigin = "anonymous";
+    s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7148612339271747";
+    document.head.appendChild(s);
+  })();
+</script>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0E6B5C">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
@@ -453,7 +467,7 @@
       <button data-r="#/faq" onclick="nav('#/faq')">FAQ</button>
       <button data-r="#/apropos" onclick="nav('#/apropos')">À propos</button>
       <button data-r="#/mes-temoignages" onclick="nav('#/mes-temoignages')">Mes témoignages</button>
-      <button data-r="#/moderation" id="nav-moderation" onclick="nav('#/moderation?admin=1')" hidden>🛡 Modération</button>
+      <button data-r="#/moderation" id="nav-moderation" onclick="ouvrirModeration()" hidden>🛡 Modération</button>
       <button id="nav-preview-toggle" onclick="togglePreviewAsVisitor()" hidden></button>
     </nav>
     <span class="contrib-pill" id="contrib-pill" hidden></span>
@@ -1000,7 +1014,12 @@
     if (route.startsWith("#/droit-de-reponse/")) { renderDroitReponse(app, route); return; }
     if (route.startsWith("#/suggestion")) { renderSuggestion(app); return; }
     if (route.startsWith("#/mes-temoignages")) { renderMesTemoignages(app); return; }
-    if (route.startsWith("#/moderation")) { renderModeration(app); return; }
+    // La modération ne s'affiche que dans un onglet sans publicité (ouvert directement sur #/moderation) ;
+    // sinon, on propose de l'ouvrir dans un nouvel onglet — cf. demande de Catherine du 24/09/2026.
+    if (route.startsWith("#/moderation")) {
+      if (!ongletSansPub()) { renderModerationAutreOnglet(app); return; }
+      renderModeration(app); return;
+    }
     if (route.startsWith("#/apropos")) { renderApropos(app); return; }
     renderHome(app);
   }
@@ -1633,7 +1652,7 @@
         try { localStorage.setItem("hs-admin", "1"); } catch(e){}
         document.getElementById("nav-moderation").hidden = false;
         closeAdminCodeModal();
-        nav("#/moderation");
+        ouvrirModeration();
       } else {
         document.getElementById("admin-code-error").textContent = "Code incorrect.";
         input.value = "";
@@ -2867,6 +2886,25 @@
   }
 
   // ---------------------------------------------------------------- MODÉRATION (admin uniquement, ?admin=1)
+  // Onglet "sans publicité" : ouvert directement sur #/moderation. Le marqueur est posé par le chargeur
+  // AdSense de l'en-tête (build_index.py) AVANT tout script tiers ; il vaut pour tout l'onglet.
+  function ongletSansPub(){
+    try { return sessionStorage.getItem("hs-sans-pub") === "1"; } catch(e){ return false; }
+  }
+  // Ouvre toujours la modération dans un NOUVEL onglet (noopener : aucun lien avec l'onglet public).
+  function ouvrirModeration(){
+    window.open(location.origin + location.pathname + "#/moderation", "_blank", "noopener");
+  }
+  window.ouvrirModeration = ouvrirModeration;
+  function renderModerationAutreOnglet(app){
+    app.innerHTML = `
+      <div class="pagehead about">
+        <h1>🛡 Modération</h1>
+        <p class="lede">Par sécurité, la modération s'ouvre uniquement dans un nouvel onglet, sans publicité.</p>
+        <button type="button" class="btn-primary" onclick="ouvrirModeration()">Ouvrir la modération dans un nouvel onglet</button>
+      </div>`;
+  }
+
   async function renderModeration(app){
     if (!isAdminMode()) {
       app.innerHTML = `<div class="pagehead about"><h1>Page introuvable</h1></div>`;
